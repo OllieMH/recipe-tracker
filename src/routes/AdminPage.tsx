@@ -63,7 +63,7 @@ export default function AdminPage() {
   return (
     <main className="mx-auto max-w-4xl space-y-8 p-4">
       <section className="space-y-4">
-        <h1 className="text-2xl font-semibold">Admin</h1>
+        <h1 className="text-3xl font-extrabold">Admin</h1>
         <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-2">
             <Label htmlFor="invite-email">E-post</Label>
@@ -87,7 +87,7 @@ export default function AdminPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Brukere</h2>
+        <h2 className="text-xl font-bold">Brukere</h2>
         {users.isLoading && <p className="text-sm text-muted-foreground">Laster …</p>}
         {users.error && <p className="text-sm text-destructive">Kunne ikke hente brukere.</p>}
         {users.data && (

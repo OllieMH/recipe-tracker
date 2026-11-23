@@ -8,7 +8,7 @@ export async function fetchRecipeList() {
   const { data, error } = await supabase
     .from('recipes')
     .select(
-      'id, owner_id, parent_id, visibility, title, description, tags, servings, servings_unit, total_minutes, created_at, ingredient_groups(ingredients(name))',
+      'id, owner_id, parent_id, visibility, title, description, tags, servings, servings_unit, total_minutes, image_path, created_at, ingredient_groups(ingredients(name))',
     )
     .order('created_at', { ascending: false })
   if (error) throw error

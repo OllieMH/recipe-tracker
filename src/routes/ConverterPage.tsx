@@ -38,7 +38,7 @@ export default function ConverterPage() {
 
   return (
     <main className="mx-auto max-w-xl space-y-5 p-4">
-      <h1 className="text-2xl font-semibold">Omregning</h1>
+      <h1 className="text-3xl font-extrabold">Omregning</h1>
       <p className="text-sm text-muted-foreground">
         Regn mellom mål og vekt for en matvare, for eksempel hvor mange gram én dl mel er.
       </p>

@@ -41,7 +41,7 @@ export default function CollapsibleSection({ id, title, actions, children }: Pro
           type="button"
           onClick={toggle}
           aria-expanded={open}
-          className="flex items-center gap-1.5 text-lg font-semibold"
+          className="flex items-center gap-1.5 text-xl font-extrabold"
         >
           <ChevronDown className={cn('size-5 transition-transform print:hidden', !open && '-rotate-90')} aria-hidden />
           {title}

@@ -7,6 +7,8 @@ import {
   draftFromLlm, importRecipe, saveRecipe, validateDraft, type DraftRecipe,
 } from '@/lib/recipe-draft'
 import RecipeForm from '@/components/RecipeForm'
+import { PendingImageField } from '@/components/ImageField'
+import { uploadRecipeImage } from '@/lib/images'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,6 +29,7 @@ export default function ImportPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<DraftRecipe | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
 
   // Rich pastes (copied from a web page) arrive as HTML: convert, keep headings and lists.
   function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
@@ -71,8 +74,17 @@ export default function ImportPage() {
     setSaving(true)
     try {
       const id = await saveRecipe(draft)
+      // The recipe is saved at this point; a failed picture upload must not lose it.
+      let notice: string | undefined
+      if (imageFile) {
+        try {
+          await uploadRecipeImage(id, imageFile)
+        } catch {
+          notice = 'Oppskriften er lagret, men bildet kunne ikke lastes opp. Legg det til under «Rediger».'
+        }
+      }
       void queryClient.invalidateQueries({ queryKey: ['recipes'] })
-      navigate(`/oppskrift/${id}`)
+      navigate(`/oppskrift/${id}`, { state: notice ? { notice } : undefined })
     } catch {
       setError('Kunne ikke lagre oppskriften. Prøv igjen.')
       setSaving(false)
@@ -83,7 +95,7 @@ export default function ImportPage() {
     return (
       <main className="mx-auto max-w-3xl space-y-6 p-4 pb-24">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-2xl font-semibold">Se over oppskriften</h1>
+          <h1 className="text-3xl font-extrabold">Se over oppskriften</h1>
           <div className="w-40">
             <Label htmlFor="vis" className="sr-only">Synlighet</Label>
             <Select id="vis" value={draft.visibility}
@@ -94,13 +106,15 @@ export default function ImportPage() {
           </div>
         </div>
 
+        <PendingImageField file={imageFile} onChange={setImageFile} />
+
         <RecipeForm draft={draft} onChange={setDraft} foods={foods} />
 
         <div className="fixed inset-x-0 bottom-0 border-t bg-background p-3">
           <div className="mx-auto flex max-w-3xl items-center gap-3">
             {error && <p role="alert" className="flex-1 text-sm text-destructive">{error}</p>}
             <Button type="button" variant="outline" className="ml-auto" disabled={saving}
-              onClick={() => { setDraft(null); setError(null) }}>
+              onClick={() => { setDraft(null); setImageFile(null); setError(null) }}>
               Avbryt
             </Button>
             <Button type="button" disabled={saving} onClick={onSave}>
@@ -114,7 +128,7 @@ export default function ImportPage() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-5 p-4">
-      <h1 className="text-2xl font-semibold">Importer oppskrift</h1>
+      <h1 className="text-3xl font-extrabold">Importer oppskrift</h1>
       <p className="text-sm text-muted-foreground">
         Åpne oppskriften på nettsiden, marker hele siden (Ctrl+A), kopier og lim inn her.
         Du får se over alt før det lagres.

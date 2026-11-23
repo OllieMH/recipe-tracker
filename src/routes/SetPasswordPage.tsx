@@ -58,7 +58,7 @@ export default function SetPasswordPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
       <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-semibold">Velg passord</h1>
+        <h1 className="text-3xl font-extrabold">Velg passord</h1>
         <div className="space-y-2">
           <Label htmlFor="password">Nytt passord</Label>
           <Input id="password" type="password" autoComplete="new-password" value={password}

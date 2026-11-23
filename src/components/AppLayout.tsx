@@ -1,6 +1,12 @@
-import { Link, Outlet } from 'react-router-dom'
+import { NavLink, Link, Outlet } from 'react-router-dom'
 import { signOut, useAuth, useIsAdmin } from '@/lib/auth'
-import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
+const navLink = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'border-b-2 py-1 text-sm font-medium transition-colors',
+    isActive ? 'border-berry text-white' : 'border-transparent text-white/70 hover:text-white',
+  )
 
 export default function AppLayout() {
   const { user } = useAuth()
@@ -8,17 +14,21 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b print:hidden">
-        <nav className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-sm">
-          <Link to="/" className="font-semibold">Oppskrift</Link>
-          <Link to="/importer" className="text-muted-foreground hover:text-foreground">Importer</Link>
-          <Link to="/omregning" className="text-muted-foreground hover:text-foreground">Omregning</Link>
-          {isAdmin && (
-            <Link to="/admin" className="text-muted-foreground hover:text-foreground">Admin</Link>
-          )}
-          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => void signOut()}>
+      <header className="bg-primary text-primary-foreground print:hidden">
+        <nav className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-5 gap-y-1 px-4 py-3">
+          <Link to="/" className="mr-3 text-xl font-extrabold tracking-tight text-white">
+            Oppskrifter
+          </Link>
+          <NavLink to="/importer" className={navLink}>Importer</NavLink>
+          <NavLink to="/omregning" className={navLink}>Omregning</NavLink>
+          {isAdmin && <NavLink to="/admin" className={navLink}>Admin</NavLink>}
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="ml-auto rounded-md px-2 py-1 text-sm text-white/70 hover:bg-white/10 hover:text-white"
+          >
             Logg ut
-          </Button>
+          </button>
         </nav>
       </header>
       <Outlet />

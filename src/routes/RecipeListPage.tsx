@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { fetchRecipes, formatMinutes, useFavorites, useRecipeList, type RecipeListItem } from '@/lib/recipes'
 import { downloadBlob } from '@/lib/download'
+import { thumbPathOf, useSignedUrls } from '@/lib/images'
+import RecipeImage from '@/components/RecipeImage'
 import { exportFilename, recipeToMarkdown, uniqueFilenames } from '@/lib/markdown'
 import { Button } from '@/components/ui/button'
+import { Clock, Lock, Search, Star, UtensilsCrossed, Users } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -43,6 +46,9 @@ export default function RecipeListPage() {
     const replaced = new Set(all.filter((r) => r.parent_id && r.owner_id === user?.id).map((r) => r.parent_id))
     return all.filter((r) => !replaced.has(r.id))
   }, [recipes.data, user?.id])
+
+  // Thumbnails for every recipe, requested once so filtering does not refetch URLs.
+  const thumbUrls = useSignedUrls(visible.map((r) => (r.image_path ? thumbPathOf(r.image_path) : null)))
 
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>()
@@ -86,15 +92,19 @@ export default function RecipeListPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-4 p-4">
-      <Input
-        type="search"
-        placeholder="Søk i tittel, ingredienser og emneord"
-        aria-label="Søk"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          type="search"
+          placeholder="Søk i tittel, ingredienser og emneord"
+          aria-label="Søk"
+          className="h-11 pl-9"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
 
-      <div role="tablist" className="flex gap-1 border-b">
+      <div role="tablist" className="flex gap-5 border-b border-foreground/20">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -102,8 +112,8 @@ export default function RecipeListPage() {
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm',
-              tab === t.id ? 'border-primary font-medium' : 'border-transparent text-muted-foreground',
+              '-mb-px border-b-[3px] py-2 text-base font-semibold transition-colors',
+              tab === t.id ? 'border-berry text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
             {t.label}
@@ -126,9 +136,10 @@ export default function RecipeListPage() {
             <button
               key={t}
               onClick={() => setTag(tag === t ? null : t)}
+              aria-pressed={tag === t}
               className={cn(
-                'rounded-full border px-2.5 py-1 text-xs',
-                tag === t ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-accent',
+                'rounded px-2.5 py-1 text-sm font-medium transition-colors',
+                tag === t ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-accent',
               )}
             >
               {t} <span className="opacity-60">{n}</span>
@@ -141,9 +152,9 @@ export default function RecipeListPage() {
       {recipes.isError && <p className="text-sm text-destructive">Kunne ikke hente oppskrifter.</p>}
 
       {recipes.data && shown.length === 0 && (
-        <div className="py-10 text-center text-sm text-muted-foreground">
+        <div className="py-10 text-center text-muted-foreground">
           {visible.length === 0 ? (
-            <>Ingen oppskrifter ennå. <Link to="/importer" className="underline">Importer den første</Link>.</>
+            <>Ingen oppskrifter ennå. <Link to="/importer" className="font-semibold text-foreground underline">Importer den første</Link>.</>
           ) : tab === 'favoritter' && !q && !tag ? (
             'Du har ingen favoritter ennå.'
           ) : (
@@ -152,24 +163,41 @@ export default function RecipeListPage() {
         </div>
       )}
 
-      <ul className="grid gap-3 sm:grid-cols-2">
+      <ul className="divide-y divide-foreground/15">
         {shown.map((r) => (
           <li key={r.id}>
-            <Link to={`/oppskrift/${r.id}`} className="block h-full rounded-lg border p-3 hover:bg-accent/50">
-              <div className="flex items-start justify-between gap-2">
-                <h2 className="font-medium leading-snug">{r.title}</h2>
-                {favorites.data?.has(r.id) && <span aria-label="Favoritt" title="Favoritt">★</span>}
+            <Link to={`/oppskrift/${r.id}`} className="-mx-2 flex gap-4 rounded-lg px-2 py-3 transition-colors hover:bg-accent/60">
+              <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary text-muted-foreground sm:size-28">
+                {r.image_path ? (
+                  <RecipeImage url={thumbUrls.data?.get(thumbPathOf(r.image_path))} alt="" className="h-full" />
+                ) : (
+                  <UtensilsCrossed className="size-7 opacity-50" aria-hidden />
+                )}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {[
-                  r.parent_id ? 'Din versjon' : r.visibility === 'private' ? 'Privat' : null,
-                  r.total_minutes ? formatMinutes(r.total_minutes) : null,
-                  r.servings ? `${r.servings} ${r.servings_unit ?? 'porsjoner'}` : null,
-                ].filter(Boolean).join(' · ')}
-              </p>
-              {r.tags.length > 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">{r.tags.slice(0, 4).join(', ')}</p>
-              )}
+              <div className="min-w-0 flex-1 py-0.5">
+                <div className="flex items-start justify-between gap-2">
+                  <h2 className="text-lg font-bold leading-snug">{r.title}</h2>
+                  {favorites.data?.has(r.id) && (
+                    <Star className="mt-1 size-5 shrink-0 fill-berry text-berry" aria-label="Favoritt" />
+                  )}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
+                  {r.total_minutes ? (
+                    <span className="inline-flex items-center gap-1.5"><Clock className="size-4" aria-hidden />{formatMinutes(r.total_minutes)}</span>
+                  ) : null}
+                  {r.servings ? (
+                    <span className="inline-flex items-center gap-1.5"><Users className="size-4" aria-hidden />{r.servings} {r.servings_unit ?? 'porsjoner'}</span>
+                  ) : null}
+                  {r.parent_id ? (
+                    <span className="inline-flex items-center gap-1.5 font-medium text-foreground"><Lock className="size-4" aria-hidden />Din versjon</span>
+                  ) : r.visibility === 'private' ? (
+                    <span className="inline-flex items-center gap-1.5 font-medium text-foreground"><Lock className="size-4" aria-hidden />Privat</span>
+                  ) : null}
+                </div>
+                {r.tags.length > 0 && (
+                  <p className="mt-1.5 truncate text-sm text-muted-foreground">{r.tags.slice(0, 4).join(', ')}</p>
+                )}
+              </div>
             </Link>
           </li>
         ))}

@@ -45,8 +45,8 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
       <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-semibold">Oppskrift</h1>
-        <p className="text-sm text-muted-foreground">Logg inn for å se oppskriftene.</p>
+        <h1 className="text-5xl font-extrabold tracking-tight">Oppskrifter</h1>
+        <p className="prose-recipe text-muted-foreground">Logg inn for å se oppskriftene.</p>
         <div className="space-y-2">
           <Label htmlFor="email">E-post</Label>
           <Input id="email" type="email" autoComplete="email" value={email}

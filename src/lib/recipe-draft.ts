@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { autoMatchFood, type Food } from './foods'
+import { removeImageFiles } from './images'
 import type { Recipe } from './recipe-schema'
 import type { RecipeDetail } from './recipes'
 
@@ -272,7 +273,9 @@ export async function copyRecipe(sourceId: string): Promise<string> {
   return data
 }
 
-export async function deleteRecipe(recipeId: string): Promise<void> {
+export async function deleteRecipe(recipeId: string, imagePath?: string | null): Promise<void> {
   const { error } = await supabase.from('recipes').delete().eq('id', recipeId)
   if (error) throw error
+  // The row is gone; clean up its picture files (only those in the recipe's own folder).
+  await removeImageFiles(recipeId, imagePath).catch(() => undefined)
 }

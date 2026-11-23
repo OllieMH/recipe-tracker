@@ -287,6 +287,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          image_path: string | null
           import_raw_text: string | null
           original_language: string | null
           owner_id: string
@@ -308,6 +309,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          image_path?: string | null
           import_raw_text?: string | null
           original_language?: string | null
           owner_id: string
@@ -329,6 +331,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          image_path?: string | null
           import_raw_text?: string | null
           original_language?: string | null
           owner_id?: string
@@ -414,6 +417,7 @@ export type Database = {
       }
       can_edit_recipe: { Args: { rid: string }; Returns: boolean }
       copy_recipe: { Args: { source_id: string }; Returns: string }
+      image_recipe_id: { Args: { path: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       owns_recipe: { Args: { recipe_id: string }; Returns: boolean }
       save_recipe: { Args: { payload: Json }; Returns: string }

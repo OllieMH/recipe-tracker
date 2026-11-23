@@ -110,12 +110,12 @@ export default function RecipeForm({ draft, onChange, foods }: Props) {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Ingredienser</h2>
+        <h2 className="text-xl font-bold">Ingredienser</h2>
         <p className="text-xs text-muted-foreground">
           «Maks» fylles ut bare ved intervall, f.eks. «2–3 ss» = mengde 2, maks 3.
         </p>
         {draft.groups.map((g, gi) => (
-          <div key={g.key} className="space-y-3 rounded-md border p-3">
+          <div key={g.key} className="space-y-3 rounded-lg border bg-card/50 p-3">
             <div className="flex items-center gap-2">
               <Input
                 aria-label="Gruppenavn"
@@ -186,7 +186,7 @@ export default function RecipeForm({ draft, onChange, foods }: Props) {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Fremgangsmåte</h2>
+        <h2 className="text-xl font-bold">Fremgangsmåte</h2>
         {draft.steps.map((s, si) => (
           <div key={s.key}
             className={`space-y-2 rounded-md border p-2 ${correctedSteps.has(si) ? HIGHLIGHT : ''}`}>

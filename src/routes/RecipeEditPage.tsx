@@ -6,6 +6,7 @@ import { useFoods } from '@/lib/foods'
 import { useRecipe, type RecipeDetail } from '@/lib/recipes'
 import { deleteRecipe, draftFromRecipe, updateRecipe, validateDraft, type DraftRecipe } from '@/lib/recipe-draft'
 import RecipeForm from '@/components/RecipeForm'
+import { SavedImageField } from '@/components/ImageField'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
@@ -40,7 +41,7 @@ function EditForm({ recipe, isOwner }: { recipe: RecipeDetail; isOwner: boolean 
     if (!window.confirm(`Slette «${recipe.title}»? Dette kan ikke angres.`)) return
     setSaving(true)
     try {
-      await deleteRecipe(recipe.id)
+      await deleteRecipe(recipe.id, recipe.image_path)
       await queryClient.invalidateQueries({ queryKey: ['recipes'] })
       navigate('/', { replace: true })
     } catch {
@@ -52,7 +53,7 @@ function EditForm({ recipe, isOwner }: { recipe: RecipeDetail; isOwner: boolean 
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-4 pb-24">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Rediger oppskrift</h1>
+        <h1 className="text-3xl font-extrabold">Rediger oppskrift</h1>
         {isOwner && !recipe.parent_id && (
           <div className="w-40">
             <Label htmlFor="vis" className="sr-only">Synlighet</Label>
@@ -64,6 +65,8 @@ function EditForm({ recipe, isOwner }: { recipe: RecipeDetail; isOwner: boolean 
           </div>
         )}
       </div>
+
+      <SavedImageField recipeId={recipe.id} path={recipe.image_path} />
 
       <RecipeForm draft={draft} onChange={setDraft} foods={foods} />
 
