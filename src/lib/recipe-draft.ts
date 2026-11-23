@@ -1,0 +1,211 @@
+import { supabase } from './supabase'
+import { autoMatchFood, type Food } from './foods'
+import type { Recipe } from './recipe-schema'
+
+/** Editable form state: numbers are strings so users can type "2,5" freely. */
+export interface DraftIngredient {
+  key: string
+  original_text: string
+  amount: string
+  amount_max: string
+  unit: string
+  original_amount: number | null
+  original_unit: string | null
+  name: string
+  note: string
+  scalable: boolean
+  food_id: number | null
+}
+
+export interface DraftGroup {
+  key: string
+  name: string
+  ingredients: DraftIngredient[]
+}
+
+export interface DraftStep {
+  key: string
+  group_name: string
+  text: string
+}
+
+export interface DraftRecipe {
+  visibility: 'public' | 'private'
+  title: string
+  description: string
+  servings: string
+  servings_unit: string
+  prep_minutes: string
+  total_minutes: string
+  source_url: string
+  original_language: string
+  was_translated: boolean
+  tags: string
+  tips: string
+  groups: DraftGroup[]
+  steps: DraftStep[]
+  import_raw_text: string | null
+  corrections: Recipe['corrections']
+  warnings: string[]
+}
+
+let counter = 0
+export const newKey = () => `k${++counter}`
+
+const numStr = (n: number | null | undefined) => (n == null ? '' : String(n).replace('.', ','))
+
+/** Parses "2,5", "1/2", "½" style input. Returns null for empty / invalid. */
+export function parseNumber(s: string): number | null {
+  const t = s.trim().replace(',', '.')
+  if (!t) return null
+  const frac: Record<string, number> = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3 }
+  if (t in frac) return frac[t]
+  const m = t.match(/^(\d+)\s*\/\s*(\d+)$/)
+  if (m && Number(m[2]) !== 0) return Number(m[1]) / Number(m[2])
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
+
+export function emptyIngredient(): DraftIngredient {
+  return {
+    key: newKey(), original_text: '', amount: '', amount_max: '', unit: '',
+    original_amount: null, original_unit: null, name: '', note: '',
+    scalable: true, food_id: null,
+  }
+}
+
+export function draftFromLlm(
+  r: Recipe,
+  opts: { foods: Food[]; visibility: 'public' | 'private'; translated: boolean; rawText: string; sourceUrl: string },
+): DraftRecipe {
+  return {
+    visibility: opts.visibility,
+    title: r.title,
+    description: r.description ?? '',
+    servings: numStr(r.servings),
+    servings_unit: r.servings_unit ?? '',
+    prep_minutes: numStr(r.prep_minutes),
+    total_minutes: numStr(r.total_minutes),
+    source_url: opts.sourceUrl,
+    original_language: r.original_language,
+    was_translated: opts.translated && r.original_language !== 'no' && r.original_language !== 'nb',
+    tags: r.tags.join(', '),
+    tips: r.tips.join('\n'),
+    groups: r.ingredient_groups.map((g) => ({
+      key: newKey(),
+      name: g.name ?? '',
+      ingredients: g.ingredients.map((i) => ({
+        key: newKey(),
+        original_text: i.original_text,
+        amount: numStr(i.amount),
+        amount_max: numStr(i.amount_max),
+        unit: i.unit ?? '',
+        original_amount: i.original_amount,
+        original_unit: i.original_unit,
+        name: i.name,
+        note: i.note ?? '',
+        scalable: i.scalable,
+        food_id: autoMatchFood(opts.foods, i.food_match, i.name)?.id ?? null,
+      })),
+    })),
+    steps: r.steps.map((s) => ({ key: newKey(), group_name: s.group_name ?? '', text: s.text })),
+    import_raw_text: opts.rawText,
+    corrections: r.corrections,
+    warnings: r.servings == null
+      ? ['Fant ikke antall porsjoner. Fyll inn selv, ellers kan ikke oppskriften skaleres.', ...r.warnings]
+      : r.warnings,
+  }
+}
+
+export function validateDraft(d: DraftRecipe): string | null {
+  if (!d.title.trim()) return 'Oppskriften trenger en tittel.'
+  const ingredients = d.groups.flatMap((g) => g.ingredients)
+  if (ingredients.length === 0) return 'Legg til minst én ingrediens.'
+  if (ingredients.some((i) => !i.name.trim())) return 'Alle ingredienser må ha et navn.'
+  if (d.steps.length === 0) return 'Legg til minst ett steg.'
+  if (d.steps.some((s) => !s.text.trim())) return 'Alle steg må ha tekst.'
+  for (const [label, v] of [
+    ['porsjoner', d.servings], ['forberedelsestid', d.prep_minutes], ['total tid', d.total_minutes],
+  ] as const) {
+    if (v.trim() && parseNumber(v) == null) return `Ugyldig tall for ${label}.`
+  }
+  for (const i of ingredients) {
+    if ((i.amount.trim() && parseNumber(i.amount) == null) || (i.amount_max.trim() && parseNumber(i.amount_max) == null)) {
+      return `Ugyldig mengde for «${i.name}».`
+    }
+  }
+  return null
+}
+
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return null
+  }
+}
+
+export function draftToPayload(d: DraftRecipe) {
+  const url = d.source_url.trim()
+  return {
+    visibility: d.visibility,
+    title: d.title.trim(),
+    description: d.description.trim() || null,
+    servings: parseNumber(d.servings),
+    servings_unit: d.servings_unit.trim() || null,
+    prep_minutes: parseNumber(d.prep_minutes) != null ? Math.round(parseNumber(d.prep_minutes)!) : null,
+    total_minutes: parseNumber(d.total_minutes) != null ? Math.round(parseNumber(d.total_minutes)!) : null,
+    source_url: url || null,
+    source_site: url ? hostOf(url) : null,
+    original_language: d.original_language || null,
+    was_translated: d.was_translated,
+    tags: d.tags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
+    tips: d.tips.split('\n').map((t) => t.trim()).filter(Boolean),
+    import_raw_text: d.import_raw_text,
+    ingredient_groups: d.groups
+      .filter((g) => g.ingredients.length > 0)
+      .map((g) => ({
+        name: g.name.trim() || null,
+        ingredients: g.ingredients.map((i) => ({
+          amount: parseNumber(i.amount),
+          amount_max: parseNumber(i.amount_max),
+          unit: i.unit || null,
+          name: i.name.trim(),
+          note: i.note.trim() || null,
+          scalable: i.scalable,
+          food_id: i.food_id,
+          original_text: i.original_text || i.name.trim(),
+          original_amount: i.original_amount,
+          original_unit: i.original_unit,
+        })),
+      })),
+    steps: d.steps.map((s) => ({ group_name: s.group_name.trim() || null, text: s.text.trim() })),
+  }
+}
+
+export async function saveRecipe(d: DraftRecipe): Promise<string> {
+  const { data, error } = await supabase.rpc('save_recipe', { payload: draftToPayload(d) })
+  if (error) throw error
+  return data
+}
+
+const IMPORT_ERRORS: Record<string, string> = {
+  not_signed_in: 'Du er ikke logget inn.',
+  invalid_input: 'Ugyldig innhold.',
+  text_too_short: 'Teksten er for kort til å være en oppskrift.',
+  text_too_long: 'Teksten er for lang. Lim inn bare selve oppskriften.',
+  rate_limited: 'Du har nådd dagens grense for importer. Prøv igjen i morgen.',
+  llm_busy: 'KI-tjenesten er travel akkurat nå. Prøv igjen om litt.',
+  llm_failed: 'Kunne ikke tolke oppskriften. Prøv igjen.',
+  internal: 'Noe gikk galt. Prøv igjen.',
+}
+
+/** Calls the import-recipe Edge Function and returns the structured recipe. */
+export async function importRecipe(text: string, translate: boolean): Promise<Recipe> {
+  const { data, error } = await supabase.functions.invoke('import-recipe', { body: { text, translate } })
+  if (error) {
+    const body = await (error as { context?: Response }).context?.json().catch(() => null)
+    throw new Error(IMPORT_ERRORS[body?.error as string] ?? IMPORT_ERRORS.internal)
+  }
+  return (data as { recipe: Recipe }).recipe
+}

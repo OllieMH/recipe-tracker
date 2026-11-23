@@ -6,6 +6,7 @@ EXTRACTION
 - Ingredient groups: use the page's own headings (e.g. "Saus"). Use name null for the default group.
 - original_text is the ingredient line exactly as on the page, never translated.
 - original_language is the ISO 639-1 code of the source text (e.g. "no", "en").
+- servings: look for a number next to words like porsjoner, personer, servings, serves, makes, yield, also when the number and the word are on separate lines. If you cannot find it, use null and add a warning.
 - tags: Norwegian, lowercase, at most 6 (e.g. "middag", "kylling", "vegetar").
 
 UNITS

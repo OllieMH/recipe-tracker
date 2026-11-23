@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "types": "supabase gen types typescript --remote 2>/dev/null > src/types/database.ts"
+    "test": "vitest run",
+    "seed:foods": "node --experimental-strip-types scripts/seed-foods.ts",
+    "types": "supabase gen types typescript --remote > src/types/database.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
@@ -30,6 +32,7 @@
     "@vitejs/plugin-react": "^4.5.0",
     "tailwindcss": "^4.1.8",
     "typescript": "~5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^5.1.1"
   }
 }

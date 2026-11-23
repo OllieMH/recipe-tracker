@@ -414,6 +414,7 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       owns_recipe: { Args: { recipe_id: string }; Returns: boolean }
+      save_recipe: { Args: { payload: Json }; Returns: string }
     }
     Enums: {
       [_ in never]: never

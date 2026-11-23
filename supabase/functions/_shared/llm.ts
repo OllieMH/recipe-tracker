@@ -15,14 +15,25 @@ interface RawResult {
   tokensOut: number
 }
 
-export class LlmError extends Error {}
+export class LlmError extends Error {
+  constructor(message: string, readonly busy = false) {
+    super(message)
+  }
+}
 
 const MODEL = () => Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.8-flash'
+// Optional comma-separated list, tried in order when a model keeps returning overload errors.
+const FALLBACK_MODELS = () =>
+  (Deno.env.get('GEMINI_FALLBACK_MODELS') ?? '').split(',').map((m) => m.trim()).filter(Boolean)
+const RETRYABLE = new Set([429, 500, 503])
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function callProvider(
+  model: string,
   systemPrompt: string,
   userContent: string,
   jsonSchema: unknown,
+  primary: boolean,
 ): Promise<RawResult> {
   const apiKey = Deno.env.get('GEMINI_API_KEY')
   if (!apiKey) throw new LlmError('GEMINI_API_KEY is not set')
@@ -30,28 +41,35 @@ async function callProvider(
   const generationConfig: Record<string, unknown> = {
     responseMimeType: 'application/json',
     responseJsonSchema: jsonSchema,
-    temperature: 0.2,
   }
-  // 'minimal' is unsupported on this model. Set GEMINI_THINKING_LEVEL=none to omit.
+  // temperature is deprecated on newer Gemini models, so it is not sent.
+  // Thinking level is verified only for the primary model ('minimal' is rejected there).
+  // Fallback models use their own default. Set GEMINI_THINKING_LEVEL=none to omit.
   const level = Deno.env.get('GEMINI_THINKING_LEVEL') ?? 'low'
-  if (level !== 'none') generationConfig.thinkingConfig = { thinkingLevel: level }
+  if (primary && level !== 'none') generationConfig.thinkingConfig = { thinkingLevel: level }
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL()}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: userContent }] }],
-        generationConfig,
-      }),
-    },
-  )
+  let res!: Response
+  for (let i = 0; i < 3; i++) {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: userContent }] }],
+          generationConfig,
+        }),
+      },
+    )
+    if (res.ok || !RETRYABLE.has(res.status)) break
+    console.warn(`Gemini ${model} returned ${res.status}, attempt ${i + 1}/3`)
+    if (i < 2) await sleep(1500 * (i + 1))
+  }
   if (!res.ok) {
     const body = await res.text()
-    console.error('Gemini error', res.status, body.slice(0, 500))
-    throw new LlmError(`LLM request failed (${res.status})`)
+    console.error('Gemini error', model, res.status, body.slice(0, 500))
+    throw new LlmError(`LLM request failed (${res.status})`, RETRYABLE.has(res.status))
   }
   const json = await res.json()
   const cand = json.candidates?.[0]
@@ -80,18 +98,34 @@ export async function generateStructured<S extends z.ZodType>(
   let tokensIn = 0
   let tokensOut = 0
   let lastError = ''
+  let model = MODEL()
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const content = attempt === 0
       ? userContent
       : `${userContent}\n\n---\nYour previous answer was invalid (${lastError}). Return valid JSON matching the schema.`
-    const raw = await callProvider(systemPrompt, content, jsonSchema)
+    let raw: RawResult | null = null
+    const chain = [model, ...FALLBACK_MODELS().filter((m) => m !== model)]
+    for (let i = 0; i < chain.length && !raw; i++) {
+      try {
+        raw = await callProvider(chain[i], systemPrompt, content, jsonSchema, chain[i] === MODEL())
+        model = chain[i]
+      } catch (err) {
+        const last = i === chain.length - 1
+        if (err instanceof LlmError && err.busy && !last) {
+          console.warn(`${chain[i]} busy, falling back to ${chain[i + 1]}`)
+        } else {
+          throw err
+        }
+      }
+    }
+    if (!raw) throw new LlmError('LLM unavailable', true)
     tokensIn += raw.tokensIn
     tokensOut += raw.tokensOut
     try {
       const parsed = schema.safeParse(JSON.parse(raw.text))
       if (parsed.success) {
-        return { data: parsed.data, model: MODEL(), tokensIn, tokensOut }
+        return { data: parsed.data, model, tokensIn, tokensOut }
       }
       lastError = parsed.error.issues.slice(0, 3).map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')
     } catch {

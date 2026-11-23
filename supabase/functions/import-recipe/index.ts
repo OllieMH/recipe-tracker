@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error('import-recipe failed:', err)
     await admin.from('import_log').insert({ user_id: userId, model, ok: false })
+    if (err instanceof LlmError && err.busy) return json({ error: 'llm_busy' }, 503)
     const code = err instanceof LlmError ? 'llm_failed' : 'internal'
     return json({ error: code }, 502)
   }
