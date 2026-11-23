@@ -400,6 +400,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_list_users: {
+        Args: never
+        Returns: {
+          created_at: string
+          display_name: string
+          email: string
+          id: string
+          import_count: number
+          is_admin: boolean
+          last_sign_in_at: string
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
       owns_recipe: { Args: { recipe_id: string }; Returns: boolean }
     }
