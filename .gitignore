@@ -28,3 +28,5 @@ references/
 # Supabase
 supabase/.branches/
 supabase/.temp/
+
+.vercel
