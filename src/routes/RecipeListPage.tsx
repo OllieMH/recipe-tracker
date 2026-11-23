@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
-import { formatMinutes, useFavorites, useRecipeList, type RecipeListItem } from '@/lib/recipes'
+import { fetchRecipes, formatMinutes, useFavorites, useRecipeList, type RecipeListItem } from '@/lib/recipes'
+import { downloadBlob } from '@/lib/download'
+import { exportFilename, recipeToMarkdown, uniqueFilenames } from '@/lib/markdown'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -31,6 +34,8 @@ export default function RecipeListPage() {
   const [tab, setTab] = useState<Tab>('alle')
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   // If the user has a private copy of a recipe, show the copy instead of the original.
   const visible = useMemo(() => {
@@ -44,6 +49,30 @@ export default function RecipeListPage() {
     for (const r of visible) for (const t of r.tags) counts.set(t, (counts.get(t) ?? 0) + 1)
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'nb')).slice(0, 20)
   }, [visible])
+
+  /** Zip of all favourites: one .md per recipe at its original servings and units. */
+  async function exportFavorites() {
+    setExportError(null)
+    setExporting(true)
+    try {
+      const full = await fetchRecipes([...(favorites.data ?? [])])
+      if (full.length === 0) {
+        setExportError('Ingen favoritter å eksportere.')
+        return
+      }
+      const names = uniqueFilenames(full.map((r) => exportFilename(r.title)))
+      const { default: JSZip } = await import('jszip')
+      const zip = new JSZip()
+      full.forEach((r, i) => {
+        zip.file(names[i], recipeToMarkdown({ ...r, servings: r.servings != null ? Number(r.servings) : null }))
+      })
+      downloadBlob(await zip.generateAsync({ type: 'blob' }), `oppskrifter-favoritter-${new Date().toISOString().slice(0, 10)}.zip`)
+    } catch {
+      setExportError('Kunne ikke lage zip-filen. Prøv igjen.')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const q = norm(query.trim())
   const shown = visible.filter(
@@ -81,6 +110,15 @@ export default function RecipeListPage() {
           </button>
         ))}
       </div>
+
+      {tab === 'favoritter' && (favorites.data?.size ?? 0) > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="sm" onClick={exportFavorites} disabled={exporting}>
+            {exporting ? 'Lager zip …' : `Eksporter favoritter (${favorites.data!.size}) som .zip`}
+          </Button>
+          {exportError && <p role="alert" className="text-sm text-destructive">{exportError}</p>}
+        </div>
+      )}
 
       {tagCounts.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

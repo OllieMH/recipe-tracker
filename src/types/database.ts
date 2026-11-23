@@ -412,9 +412,15 @@ export type Database = {
           last_sign_in_at: string
         }[]
       }
+      can_edit_recipe: { Args: { rid: string }; Returns: boolean }
+      copy_recipe: { Args: { source_id: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       owns_recipe: { Args: { recipe_id: string }; Returns: boolean }
       save_recipe: { Args: { payload: Json }; Returns: string }
+      update_recipe: {
+        Args: { payload: Json; recipe_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

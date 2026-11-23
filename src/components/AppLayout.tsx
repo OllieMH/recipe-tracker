@@ -8,7 +8,7 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b">
+      <header className="border-b print:hidden">
         <nav className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-sm">
           <Link to="/" className="font-semibold">Oppskrift</Link>
           <Link to="/importer" className="text-muted-foreground hover:text-foreground">Importer</Link>

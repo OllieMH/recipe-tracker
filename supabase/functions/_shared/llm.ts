@@ -16,7 +16,8 @@ interface RawResult {
 }
 
 export class LlmError extends Error {
-  constructor(message: string, readonly busy = false) {
+  /** busy: temporary overload (UI says "try again"). skip: try the next model in the chain. */
+  constructor(message: string, readonly busy = false, readonly skip = busy) {
     super(message)
   }
 }
@@ -69,7 +70,7 @@ async function callProvider(
   if (!res.ok) {
     const body = await res.text()
     console.error('Gemini error', model, res.status, body.slice(0, 500))
-    throw new LlmError(`LLM request failed (${res.status})`, RETRYABLE.has(res.status))
+    throw new LlmError(`LLM request failed (${res.status})`, RETRYABLE.has(res.status), RETRYABLE.has(res.status) || res.status === 404)
   }
   const json = await res.json()
   const cand = json.candidates?.[0]
@@ -112,7 +113,7 @@ export async function generateStructured<S extends z.ZodType>(
         model = chain[i]
       } catch (err) {
         const last = i === chain.length - 1
-        if (err instanceof LlmError && err.busy && !last) {
+        if (err instanceof LlmError && err.skip && !last) {
           console.warn(`${chain[i]} busy, falling back to ${chain[i + 1]}`)
         } else {
           throw err

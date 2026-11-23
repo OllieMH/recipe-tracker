@@ -43,12 +43,13 @@ export default function CollapsibleSection({ id, title, actions, children }: Pro
           aria-expanded={open}
           className="flex items-center gap-1.5 text-lg font-semibold"
         >
-          <ChevronDown className={cn('size-5 transition-transform', !open && '-rotate-90')} aria-hidden />
+          <ChevronDown className={cn('size-5 transition-transform print:hidden', !open && '-rotate-90')} aria-hidden />
           {title}
         </button>
-        {open && actions}
+        {open && <div className="print:hidden">{actions}</div>}
       </div>
-      {open && children}
+      {/* Always rendered so collapsed sections still appear when printing */}
+      <div className={cn('space-y-3', !open && 'hidden print:block')}>{children}</div>
     </section>
   )
 }

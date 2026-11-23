@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { autoMatchFood, type Food } from './foods'
 import type { Recipe } from './recipe-schema'
+import type { RecipeDetail } from './recipes'
 
 /** Editable form state: numbers are strings so users can type "2,5" freely. */
 export interface DraftIngredient {
@@ -117,6 +118,45 @@ export function draftFromLlm(
   }
 }
 
+/** Builds the editable form state from a saved recipe (edit page, Fix with AI). */
+export function draftFromRecipe(r: RecipeDetail): DraftRecipe {
+  return {
+    visibility: r.visibility as 'public' | 'private',
+    title: r.title,
+    description: r.description ?? '',
+    servings: numStr(r.servings != null ? Number(r.servings) : null),
+    servings_unit: r.servings_unit ?? '',
+    prep_minutes: numStr(r.prep_minutes),
+    total_minutes: numStr(r.total_minutes),
+    source_url: r.source_url ?? '',
+    original_language: r.original_language ?? '',
+    was_translated: r.was_translated,
+    tags: r.tags.join(', '),
+    tips: r.tips.join('\n'),
+    groups: r.ingredient_groups.map((g) => ({
+      key: newKey(),
+      name: g.name ?? '',
+      ingredients: g.ingredients.map((i) => ({
+        key: newKey(),
+        original_text: i.original_text,
+        amount: numStr(i.amount != null ? Number(i.amount) : null),
+        amount_max: numStr(i.amount_max != null ? Number(i.amount_max) : null),
+        unit: i.unit ?? '',
+        original_amount: i.original_amount != null ? Number(i.original_amount) : null,
+        original_unit: i.original_unit,
+        name: i.name,
+        note: i.note ?? '',
+        scalable: i.scalable,
+        food_id: i.food_id,
+      })),
+    })),
+    steps: r.steps.map((st) => ({ key: newKey(), group_name: st.group_name ?? '', text: st.text })),
+    import_raw_text: r.import_raw_text,
+    corrections: [],
+    warnings: [],
+  }
+}
+
 export function validateDraft(d: DraftRecipe): string | null {
   if (!d.title.trim()) return 'Oppskriften trenger en tittel.'
   const ingredients = d.groups.flatMap((g) => g.ingredients)
@@ -189,23 +229,50 @@ export async function saveRecipe(d: DraftRecipe): Promise<string> {
   return data
 }
 
-const IMPORT_ERRORS: Record<string, string> = {
+const LLM_ERRORS: Record<string, string> = {
   not_signed_in: 'Du er ikke logget inn.',
   invalid_input: 'Ugyldig innhold.',
+  not_found: 'Fant ikke oppskriften.',
   text_too_short: 'Teksten er for kort til å være en oppskrift.',
   text_too_long: 'Teksten er for lang. Lim inn bare selve oppskriften.',
-  rate_limited: 'Du har nådd dagens grense for importer. Prøv igjen i morgen.',
+  rate_limited: 'Du har nådd dagens grense for KI-bruk. Prøv igjen i morgen.',
   llm_busy: 'KI-tjenesten er travel akkurat nå. Prøv igjen om litt.',
-  llm_failed: 'Kunne ikke tolke oppskriften. Prøv igjen.',
+  llm_failed: 'Kunne ikke tolke svaret fra KI. Prøv igjen.',
   internal: 'Noe gikk galt. Prøv igjen.',
 }
 
-/** Calls the import-recipe Edge Function and returns the structured recipe. */
-export async function importRecipe(text: string, translate: boolean): Promise<Recipe> {
-  const { data, error } = await supabase.functions.invoke('import-recipe', { body: { text, translate } })
+async function invokeLlm(fn: string, body: Record<string, unknown>): Promise<Recipe> {
+  const { data, error } = await supabase.functions.invoke(fn, { body })
   if (error) {
-    const body = await (error as { context?: Response }).context?.json().catch(() => null)
-    throw new Error(IMPORT_ERRORS[body?.error as string] ?? IMPORT_ERRORS.internal)
+    const res = await (error as { context?: Response }).context?.json().catch(() => null)
+    throw new Error(LLM_ERRORS[res?.error as string] ?? LLM_ERRORS.internal)
   }
   return (data as { recipe: Recipe }).recipe
+}
+
+/** Calls the import-recipe Edge Function and returns the structured recipe. */
+export function importRecipe(text: string, translate: boolean): Promise<Recipe> {
+  return invokeLlm('import-recipe', { text, translate })
+}
+
+/** Calls fix-recipe: returns a proposed corrected recipe. Nothing is saved. */
+export function fixRecipe(recipeId: string, instruction: string): Promise<Recipe> {
+  return invokeLlm('fix-recipe', { recipe_id: recipeId, instruction })
+}
+
+export async function updateRecipe(recipeId: string, d: DraftRecipe): Promise<void> {
+  const { error } = await supabase.rpc('update_recipe', { recipe_id: recipeId, payload: draftToPayload(d) })
+  if (error) throw error
+}
+
+/** "Lag min versjon": private copy linked to the original. Returns the copy's id. */
+export async function copyRecipe(sourceId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('copy_recipe', { source_id: sourceId })
+  if (error) throw error
+  return data
+}
+
+export async function deleteRecipe(recipeId: string): Promise<void> {
+  const { error } = await supabase.from('recipes').delete().eq('id', recipeId)
+  if (error) throw error
 }

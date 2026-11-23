@@ -22,14 +22,17 @@ export function useRecipeList() {
 
 // ---------- detail ----------
 
-export async function fetchRecipe(id: string) {
-  const { data, error } = await supabase
-    .from('recipes')
-    .select('*, ingredient_groups(*, ingredients(*)), steps(*)')
-    .eq('id', id)
-    .maybeSingle()
+const DETAIL_SELECT = '*, ingredient_groups(*, ingredients(*)), steps(*)'
+
+type RawDetail = NonNullable<Awaited<ReturnType<typeof fetchRawRecipe>>>
+
+async function fetchRawRecipe(id: string) {
+  const { data, error } = await supabase.from('recipes').select(DETAIL_SELECT).eq('id', id).maybeSingle()
   if (error) throw error
-  if (!data) return null
+  return data
+}
+
+function normalizeRecipe(data: RawDetail) {
   return {
     ...data,
     ingredient_groups: [...data.ingredient_groups]
@@ -38,7 +41,20 @@ export async function fetchRecipe(id: string) {
     steps: [...data.steps].sort((a, b) => a.position - b.position),
   }
 }
+
+export async function fetchRecipe(id: string) {
+  const data = await fetchRawRecipe(id)
+  return data ? normalizeRecipe(data) : null
+}
 export type RecipeDetail = NonNullable<Awaited<ReturnType<typeof fetchRecipe>>>
+
+/** Several recipes in one request (used by the favourites export). */
+export async function fetchRecipes(ids: string[]): Promise<RecipeDetail[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await supabase.from('recipes').select(DETAIL_SELECT).in('id', ids)
+  if (error) throw error
+  return data.map(normalizeRecipe)
+}
 
 export function useRecipe(id: string | undefined) {
   return useQuery({
@@ -117,26 +133,30 @@ export function useToggleFavorite(userId: string | undefined) {
 // ---------- food measures ----------
 
 /** food_id -> { unit: grams per one unit } for the given foods. */
+export async function fetchMeasures(foodIds: number[]): Promise<Map<number, Measures>> {
+  const ids = [...new Set(foodIds)].sort((a, b) => a - b)
+  const map = new Map<number, Measures>()
+  if (ids.length === 0) return map
+  const { data, error } = await supabase
+    .from('food_measures')
+    .select('food_id, unit, grams')
+    .in('food_id', ids)
+  if (error) throw error
+  for (const m of data) {
+    const cur = map.get(m.food_id) ?? {}
+    cur[m.unit] = Number(m.grams)
+    map.set(m.food_id, cur)
+  }
+  return map
+}
+
 export function useMeasures(foodIds: number[]) {
   const ids = [...new Set(foodIds)].sort((a, b) => a - b)
   return useQuery({
     queryKey: ['measures', ids],
     enabled: ids.length > 0,
     staleTime: Infinity,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('food_measures')
-        .select('food_id, unit, grams')
-        .in('food_id', ids)
-      if (error) throw error
-      const map = new Map<number, Measures>()
-      for (const m of data) {
-        const cur = map.get(m.food_id) ?? {}
-        cur[m.unit] = Number(m.grams)
-        map.set(m.food_id, cur)
-      }
-      return map
-    },
+    queryFn: () => fetchMeasures(ids),
   })
 }
 

@@ -1,14 +1,22 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { useAuth } from '@/lib/auth'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { useAuth, useIsAdmin } from '@/lib/auth'
+import { useFoods } from '@/lib/foods'
+import { copyRecipe } from '@/lib/recipe-draft'
 import {
   formatMinutes, useFavorites, useMeasures, useMyCopyOf, useParent, useRecipe, useToggleFavorite,
   type RecipeDetail,
 } from '@/lib/recipes'
-import { alternatives, volumeToGrams, type Measures } from '@/lib/conversion'
-import { formatNumber, formatRange, roundForUnit, scaleAmount, scaleFactor } from '@/lib/scaling'
+import { alternatives, type Measures } from '@/lib/conversion'
+import { displayIngredient } from '@/lib/ingredient-display'
+import { downloadText } from '@/lib/download'
+import { exportFilename, recipeToMarkdown } from '@/lib/markdown'
+import { recipeToPlainText } from '@/lib/plaintext'
+import { formatNumber, formatRange, scaleAmount, scaleFactor } from '@/lib/scaling'
 import { Button } from '@/components/ui/button'
 import CollapsibleSection from '@/components/CollapsibleSection'
+import FixWithAi from '@/components/FixWithAi'
 import { cn } from '@/lib/utils'
 
 type Ingredient = RecipeDetail['ingredient_groups'][number]['ingredients'][number]
@@ -19,21 +27,10 @@ function IngredientRow({
   const [open, setOpen] = useState(false)
 
   const amount = scaleAmount(ing.amount, ing.unit, factor, ing.scalable)
-  const amountMax = scaleAmount(ing.amount_max, ing.unit, factor, ing.scalable)
-
-  // "Vis i gram": volume amounts become grams when the food has a measure. Otherwise unchanged.
-  let shownAmount = amount
-  let shownMax = amountMax
-  let shownUnit = ing.unit
-  if (grams && amount != null && measures) {
-    const g = volumeToGrams(amount, ing.unit, measures)
-    if (g != null) {
-      shownAmount = roundForUnit(g, 'g')
-      const gMax = amountMax != null ? volumeToGrams(amountMax, ing.unit, measures) : null
-      shownMax = gMax != null ? roundForUnit(gMax, 'g') : null
-      shownUnit = 'g'
-    }
-  }
+  const shown = displayIngredient(ing, factor, grams, measures)
+  const shownAmount = shown.amount
+  const shownMax = shown.amountMax
+  const shownUnit = shown.unit
 
   const alts = amount != null && measures ? alternatives(amount, ing.unit, measures) : []
   const hasDetail = alts.length > 0 || !!ing.original_text || ing.original_amount != null
@@ -82,9 +79,17 @@ export default function RecipeDetailPage() {
   const toggleFav = useToggleFavorite(user?.id)
   const myCopy = useMyCopyOf(id, user?.id)
   const parent = useParent(recipe.data?.parent_id)
+  const admin = useIsAdmin(user?.id)
+  const foods = useFoods()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [showFix, setShowFix] = useState(false)
+  const [copying, setCopying] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const [servingsOverride, setServingsOverride] = useState<number | null>(null)
   const [grams, setGrams] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const r = recipe.data
   const foodIds = r ? r.ingredient_groups.flatMap((g) => g.ingredients.map((i) => i.food_id)).filter((x): x is number => x != null) : []
@@ -105,18 +110,57 @@ export default function RecipeDetailPage() {
   const servings = servingsOverride ?? baseServings
   const factor = scaleFactor(servings ?? 0, baseServings)
   const isFav = favorites.data?.has(r.id) ?? false
+  const servingsChanged = servingsOverride != null && servingsOverride !== baseServings
   const canGrams = foodIds.length > 0
+
+  const isOwner = r.owner_id === user?.id
+  const canEdit = isOwner || (!!admin.data && r.visibility === 'public')
+
+  async function makeCopy() {
+    setActionError(null)
+    setCopying(true)
+    try {
+      const copyId = await copyRecipe(r!.id)
+      await queryClient.invalidateQueries({ queryKey: ['recipes'] })
+      navigate(`/oppskrift/${copyId}`)
+    } catch {
+      setActionError('Kunne ikke lage en kopi. Prøv igjen.')
+      setCopying(false)
+    }
+  }
+
+  function downloadMarkdown() {
+    const md = recipeToMarkdown(
+      { ...r!, servings: r!.servings != null ? Number(r!.servings) : null },
+      { servings, grams, measures: measures.data },
+    )
+    downloadText(md, exportFilename(r!.title))
+  }
+
+  async function copyText() {
+    const text = recipeToPlainText(
+      { ...r!, servings: r!.servings != null ? Number(r!.servings) : null },
+      { servings, grams, measures: measures.data },
+    )
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setActionError('Kunne ikke kopiere. Bruk «Last ned .md» i stedet.')
+    }
+  }
 
   const staleOriginal = r.parent_id && parent.data && new Date(parent.data.updated_at) > new Date(r.created_at)
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-4 pb-16">
       <div className="space-y-2">
-        <Link to="/" className="text-sm text-muted-foreground hover:underline">← Oppskrifter</Link>
+        <Link to="/" className="text-sm text-muted-foreground hover:underline print:hidden">← Oppskrifter</Link>
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-2xl font-semibold leading-tight">{r.title}</h1>
           <Button
-            variant="outline" size="sm"
+            variant="outline" size="sm" className="print:hidden"
             aria-pressed={isFav}
             disabled={toggleFav.isPending}
             onClick={() => toggleFav.mutate({ recipeId: r.id, favorite: !isFav })}
@@ -143,17 +187,45 @@ export default function RecipeDetailPage() {
         {r.tags.length > 0 && <p className="text-xs text-muted-foreground">{r.tags.join(', ')}</p>}
 
         {r.parent_id && (
-          <p className="rounded-md bg-muted p-2 text-sm">
+          <p className="rounded-md bg-muted p-2 text-sm print:hidden">
             Dette er din versjon. <Link to={`/oppskrift/${r.parent_id}`} className="underline">Se originalen</Link>
             {staleOriginal && ' · Originalen er endret siden du lagde din versjon.'}
           </p>
         )}
         {!r.parent_id && myCopy.data && (
-          <p className="rounded-md bg-muted p-2 text-sm">
+          <p className="rounded-md bg-muted p-2 text-sm print:hidden">
             Du har en egen versjon. <Link to={`/oppskrift/${myCopy.data.id}`} className="underline">Åpne din versjon</Link>
           </p>
         )}
+
+        <div className="flex flex-wrap gap-2 pt-1 print:hidden">
+          {canEdit && (
+            <Button variant="outline" size="sm" onClick={() => navigate(`/oppskrift/${r.id}/rediger`)}>
+              Rediger
+            </Button>
+          )}
+          {!isOwner && !r.parent_id && !myCopy.data && (
+            <Button variant="outline" size="sm" onClick={makeCopy} disabled={copying}>
+              {copying ? 'Lager kopi …' : 'Lag min versjon'}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => setShowFix(true)}>Fiks med AI</Button>
+          <Button variant="outline" size="sm" onClick={downloadMarkdown}>Last ned .md</Button>
+          <Button variant="outline" size="sm" onClick={copyText}>{copied ? 'Kopiert ✓' : 'Kopier tekst'}</Button>
+          <Button variant="outline" size="sm" onClick={() => window.print()}>Skriv ut / PDF</Button>
+        </div>
+        {actionError && <p role="alert" className="text-sm text-destructive">{actionError}</p>}
       </div>
+
+      {showFix && (
+        <FixWithAi
+          recipe={r}
+          foods={foods.data ?? []}
+          canEdit={canEdit}
+          myCopyId={myCopy.data?.id ?? null}
+          onClose={() => setShowFix(false)}
+        />
+      )}
 
       {r.description && <p className="text-muted-foreground">{r.description}</p>}
 
@@ -172,9 +244,17 @@ export default function RecipeDetailPage() {
                 </span>
                 <Button variant="outline" size="sm" aria-label="Flere"
                   onClick={() => setServingsOverride(servings + 1)}>+</Button>
-                {servingsOverride != null && servingsOverride !== baseServings && (
-                  <Button variant="ghost" size="sm" onClick={() => setServingsOverride(null)}>Nullstill</Button>
-                )}
+                {/* Always rendered, only hidden, so the stepper doesn't shift when it appears */}
+                <Button
+                  variant="ghost" size="sm"
+                  className={cn(!servingsChanged && 'invisible')}
+                  disabled={!servingsChanged}
+                  tabIndex={servingsChanged ? 0 : -1}
+                  aria-hidden={!servingsChanged}
+                  onClick={() => setServingsOverride(null)}
+                >
+                  Nullstill
+                </Button>
               </div>
             )}
             {canGrams && (
@@ -185,6 +265,11 @@ export default function RecipeDetailPage() {
           </div>
         }
       >
+        {servings != null && (
+          <p className="hidden text-sm print:block">
+            {formatNumber(servings)} {r.servings_unit ?? 'porsjoner'}{grams ? ' · vist i gram' : ''}
+          </p>
+        )}
         {baseServings == null && (
           <p className="text-sm text-muted-foreground">Antall porsjoner mangler, så mengdene kan ikke skaleres.</p>
         )}
