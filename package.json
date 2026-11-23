@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "types": "supabase gen types typescript --remote | tail -n +2 > src/types/database.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
