@@ -263,6 +263,7 @@ const LLM_ERRORS: Record<string, string> = {
   images_too_large: 'Bildene er for store. Prøv færre bilder eller lavere oppløsning.',
   rate_limited: 'Du har nådd dagens grense for KI-bruk. Prøv igjen i morgen.',
   llm_busy: 'KI-tjenesten er travel akkurat nå. Prøv igjen om litt.',
+  llm_quota: 'KI-tjenestens grense for i dag er nådd. Prøv igjen i morgen, eller bruk «Skriv selv».',
   llm_failed: 'Kunne ikke tolke svaret fra KI. Prøv igjen.',
   internal: 'Noe gikk galt. Prøv igjen.',
 }

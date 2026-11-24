@@ -22,8 +22,9 @@ export interface LlmImage {
 }
 
 export class LlmError extends Error {
-  /** busy: temporary overload (UI says "try again"). skip: try the next model in the chain. */
-  constructor(message: string, readonly busy = false, readonly skip = busy) {
+  /** busy: temporary overload (UI says "try again"). skip: try the next model in the chain.
+   *  quota: the model's request limit is used up (429): retrying the same model cannot help. */
+  constructor(message: string, readonly busy = false, readonly skip = busy, readonly quota = false) {
     super(message)
   }
 }
@@ -33,6 +34,10 @@ const MODEL = () => Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.8-flash'
 const FALLBACK_MODELS = () =>
   (Deno.env.get('GEMINI_FALLBACK_MODELS') ?? '').split(',').map((m) => m.trim()).filter(Boolean)
 const RETRYABLE = new Set([429, 500, 503])
+// Only overload is worth a second try on the same model. A 429 is a used-up quota, and every failed
+// request counts against the free tier's daily limit too, so do not hammer.
+const RETRY_SAME_MODEL = new Set([500, 503])
+const ATTEMPTS_PER_MODEL = 2
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 // Supabase kills a function after 150 s of wall-clock time. Stay under that: each Gemini call
 // may take at most CALL_TIMEOUT_MS, and nothing new starts once the whole request has used TOTAL_BUDGET_MS.
@@ -62,7 +67,7 @@ async function callProvider(
   if (primary && level !== 'none') generationConfig.thinkingConfig = { thinkingLevel: level }
 
   let res!: Response
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < ATTEMPTS_PER_MODEL; i++) {
     const remaining = deadline - Date.now()
     if (remaining < 8_000) throw new LlmError('LLM time budget used up', true, false)
     try {
@@ -91,14 +96,14 @@ async function callProvider(
       console.warn(`Gemini ${model} did not answer in time`, err)
       throw new LlmError(`LLM request timed out (${model})`, true)
     }
-    if (res.ok || !RETRYABLE.has(res.status)) break
-    console.warn(`Gemini ${model} returned ${res.status}, attempt ${i + 1}/3`)
-    if (i < 2) await sleep(1500 * (i + 1))
+    if (res.ok || !RETRY_SAME_MODEL.has(res.status)) break
+    console.warn(`Gemini ${model} returned ${res.status}, attempt ${i + 1}/${ATTEMPTS_PER_MODEL}`)
+    if (i < ATTEMPTS_PER_MODEL - 1) await sleep(3000)
   }
   if (!res.ok) {
     const body = await res.text()
     console.error('Gemini error', model, res.status, body.slice(0, 500))
-    throw new LlmError(`LLM request failed (${res.status})`, RETRYABLE.has(res.status), RETRYABLE.has(res.status) || res.status === 404)
+    throw new LlmError(`LLM request failed (${res.status})`, RETRYABLE.has(res.status), RETRYABLE.has(res.status) || res.status === 404, res.status === 429)
   }
   const json = await res.json()
   const cand = json.candidates?.[0]
