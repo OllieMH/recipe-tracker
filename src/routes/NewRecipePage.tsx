@@ -5,6 +5,7 @@ import { draftFromLlm, emptyDraft, importRecipe, importRecipeFromImages, type Dr
 import { prepareForAi } from '@/lib/images'
 import RecipeReview from '@/components/RecipeReview'
 import ImageSourcePicker from '@/components/ImageSourcePicker'
+import ImportProgress from '@/components/ImportProgress'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,6 +37,7 @@ export default function NewRecipePage() {
   const [sourceUrl, setSourceUrl] = useState('')
   const [translate, setTranslate] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [step, setStep] = useState('Leser oppskriften …')
   // photo mode
   const [photos, setPhotos] = useState<File[]>([])
 
@@ -56,6 +58,7 @@ export default function NewRecipePage() {
       setError('Lim inn oppskriften først.')
       return
     }
+    setStep('Leser oppskriften …')
     setBusy(true)
     try {
       const recipe = await importRecipe(cleaned, translate)
@@ -79,9 +82,11 @@ export default function NewRecipePage() {
       setError('Velg minst ett bilde først.')
       return
     }
+    setStep('Gjør bildene klare …')
     setBusy(true)
     try {
       const prepared = await Promise.all(photos.map(prepareForAi))
+      setStep('Leser oppskriften fra bildene …')
       const recipe = await importRecipeFromImages(prepared, translate)
       setReview({
         heading: 'Se over oppskriften',
@@ -167,13 +172,14 @@ export default function NewRecipePage() {
             {visibilityField}
           </div>
 
+          {busy && <ImportProgress step={step} />}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           {foodsQuery.isError && (
             <p className="text-sm text-muted-foreground">Kunne ikke laste matvarelisten. Kobling til matvarer er ikke tilgjengelig.</p>
           )}
 
           <Button type="button" onClick={onImport} disabled={busy || foodsQuery.isLoading}>
-            {busy ? 'Leser oppskriften … (opptil 30 sek)' : 'Importer'}
+            Importer
           </Button>
         </div>
       )}
@@ -201,10 +207,11 @@ export default function NewRecipePage() {
             {visibilityField}
           </div>
 
+          {busy && <ImportProgress step={step} />}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
           <Button type="button" onClick={onImportImages} disabled={busy || foodsQuery.isLoading}>
-            {busy ? 'Leser bildene … (opptil 60 sek)' : 'Les oppskriften'}
+            Les oppskriften
           </Button>
         </div>
       )}
