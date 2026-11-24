@@ -7,7 +7,7 @@ import type { Persister } from '@tanstack/react-query-persist-client'
 /** How long a saved copy stays usable. Queries must be kept in memory at least this long. */
 export const CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 7
 /** Bump when the shape of saved data changes, so old copies are thrown away. */
-export const CACHE_BUSTER = 'v1'
+export const CACHE_BUSTER = 'v2' // v2: item ids became UUIDs (item_client_ids migration)
 
 export const cacheKey = (userId: string) => `kokebok-cache-${userId}`
 

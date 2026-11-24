@@ -420,7 +420,7 @@ export type Database = {
           checked_by: string | null
           created_at: string
           food_id: number | null
-          id: number
+          id: string
           list_id: string
           name: string
           orig_amount: number | null
@@ -429,6 +429,7 @@ export type Database = {
           position: number
           recipe_id: string | null
           recipe_title: string | null
+          seq: number
           unit: string | null
         }
         Insert: {
@@ -440,7 +441,7 @@ export type Database = {
           checked_by?: string | null
           created_at?: string
           food_id?: number | null
-          id?: never
+          id?: string
           list_id: string
           name: string
           orig_amount?: number | null
@@ -449,6 +450,7 @@ export type Database = {
           position?: number
           recipe_id?: string | null
           recipe_title?: string | null
+          seq?: never
           unit?: string | null
         }
         Update: {
@@ -460,7 +462,7 @@ export type Database = {
           checked_by?: string | null
           created_at?: string
           food_id?: number | null
-          id?: never
+          id?: string
           list_id?: string
           name?: string
           orig_amount?: number | null
@@ -469,6 +471,7 @@ export type Database = {
           position?: number
           recipe_id?: string | null
           recipe_title?: string | null
+          seq?: never
           unit?: string | null
         }
         Relationships: [

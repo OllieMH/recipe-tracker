@@ -121,7 +121,7 @@ export default function ShoppingListPage() {
 
   // Recipes whose items are on this list, so a whole recipe can be taken off again.
   const recipesOnList = useMemo(() => {
-    const byId = new Map<string, { id: string; title: string; rowIds: number[] }>()
+    const byId = new Map<string, { id: string; title: string; rowIds: string[] }>()
     for (const i of items) {
       if (!i.recipe_id) continue
       const r = byId.get(i.recipe_id) ?? { id: i.recipe_id, title: i.recipe_title ?? 'Oppskrift', rowIds: [] }
@@ -153,29 +153,24 @@ export default function ShoppingListPage() {
   }
   const isOwner = list.data.owner_id === user?.id
 
-  const edit = (updates: RowUpdate[], deleteIds: number[] = []) => editRows.mutate({ updates, deleteIds })
+  const edit = (updates: RowUpdate[], deleteIds: string[] = []) => editRows.mutate({ updates, deleteIds })
 
   function onAdd(e: FormEvent) {
     e.preventDefault()
     const parsed = parseQuickAdd(text)
     if (!parsed) return
     const food = foods.data ? autoMatchFood(foods.data, parsed.name) : null
-    addItem.mutate(
-      {
-        name: parsed.name,
-        amount: parsed.amount,
-        unit: parsed.unit,
-        food_id: food?.id ?? null,
-        // a section someone chose for this name before beats the food database's guess
-        aisle: overrideFor(overrides.data, parsed.name) ?? aisleFor(food, aisleMap.data),
-      },
-      {
-        onSuccess: () => {
-          setText('')
-          inputRef.current?.focus()
-        },
-      },
-    )
+    addItem.mutate({
+      name: parsed.name,
+      amount: parsed.amount,
+      unit: parsed.unit,
+      food_id: food?.id ?? null,
+      // a section someone chose for this name before beats the food database's guess
+      aisle: overrideFor(overrides.data, parsed.name) ?? aisleFor(food, aisleMap.data),
+    })
+    // The item is already on the list (and, offline, waits to be sent): no need to wait.
+    setText('')
+    inputRef.current?.focus()
   }
 
   function onRename(e: FormEvent) {
@@ -268,20 +263,10 @@ export default function ShoppingListPage() {
           maxLength={200}
           onChange={(e) => setText(e.target.value)}
         />
-        <Button
-          type="submit"
-          disabled={!online || addItem.isPending || !text.trim()}
-          aria-label="Legg til"
-          title={online ? undefined : 'Krever nett'}
-        >
+        <Button type="submit" disabled={!text.trim()} aria-label="Legg til">
           <Plus className="size-4" /> Legg til
         </Button>
       </form>
-      {!online && (
-        <p className="text-sm text-muted-foreground">
-          Nye varer kan ikke legges til uten nett ennå. Du kan fortsatt huke av og endre det som står på listen.
-        </p>
-      )}
 
       <div>
         <Button

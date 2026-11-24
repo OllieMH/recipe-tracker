@@ -15,7 +15,10 @@ import { ML_PER_UNIT, G_PER_UNIT, fromGrams, isVolume, isWeight, toGrams, type M
 
 /** The columns of a shopping_list_items row this module needs. */
 export interface MergeItem {
-  id: number
+  /** A UUID. The app may make it itself (an item typed while offline), see the item_client_ids migration. */
+  id: string
+  /** Creation order (a counter in the database). Items with the same position sort by it. */
+  seq: number
   name: string
   amount: number | null
   amount_max: number | null
@@ -70,7 +73,7 @@ export interface MergeSuggestion {
 
 /** A write to one row: new amount/unit plus the bookkeeping needed for undo. */
 export interface RowUpdate {
-  id: number
+  id: string
   amount: number | null
   amount_max: number | null
   unit: string | null
@@ -87,7 +90,7 @@ const normName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 export const foodKeyOf = (item: Pick<MergeItem, 'food_id' | 'name'>): string =>
   item.food_id != null ? `f:${item.food_id}` : `n:${normName(item.name)}`
 
-const byOrder = (a: MergeItem, b: MergeItem) => a.position - b.position || a.id - b.id
+const byOrder = (a: MergeItem, b: MergeItem) => a.position - b.position || a.seq - b.seq
 
 const measuresFor = (foodKey: string, byFood: MeasuresByFood): Measures => {
   const foodId = foodKey.startsWith('f:') ? Number(foodKey.slice(2)) : null
@@ -309,7 +312,7 @@ export function quickSteps(unit: string | null): number[] {
 export interface LineAdjustment {
   updates: RowUpdate[]
   /** Rows used up by a decrease; delete them. */
-  deleteIds: number[]
+  deleteIds: string[]
 }
 
 /**
@@ -346,7 +349,7 @@ export function adjustLine(line: ShoppingLine, newAmount: number): LineAdjustmen
 
   let need = -delta
   const updates: RowUpdate[] = []
-  const deleteIds: number[] = []
+  const deleteIds: string[] = []
   for (let i = rows.length - 1; i >= 0 && need > 0; i--) {
     const row = rows[i]
     const have = row.amount ?? 0

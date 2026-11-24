@@ -195,6 +195,27 @@ begin
   insert into public.shopping_list_items (list_id, name, amount, unit, aisle)
   values (lid, 'melk', 1, 'l', 'Meieri og egg');
 
+  -- the app may choose an item's id (items typed offline); the same id twice hits the
+  -- primary key; the id cannot be changed afterwards and seq cannot be chosen
+  insert into public.shopping_list_items (id, list_id, name)
+  values ('eeeeeeee-0000-0000-0000-000000000001', lid, 'client id');
+  ok := false;
+  begin
+    insert into public.shopping_list_items (id, list_id, name)
+    values ('eeeeeeee-0000-0000-0000-000000000001', lid, 'client id');
+  exception when unique_violation then ok := true; end;
+  assert ok, 'the same item id must not be insertable twice';
+  ok := false;
+  begin
+    update public.shopping_list_items set id = gen_random_uuid() where list_id = lid;
+  exception when insufficient_privilege then ok := true; end;
+  assert ok, 'an item id must not be updatable';
+  ok := false;
+  begin
+    insert into public.shopping_list_items (list_id, name, seq) values (lid, 'x', 5);
+  exception when others then ok := true; end;
+  assert ok, 'seq (creation order) must not be settable by the client';
+
   -- lists and members cannot be written directly
   begin
     insert into public.shopping_lists (name, owner_id) values ('direct', auth.uid());
@@ -296,7 +317,7 @@ select set_config('request.jwt.claims',
   '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}', true);
 
 do $$
-declare lid uuid := current_setting('test.list_id')::uuid; n int; item bigint; who uuid; names int;
+declare lid uuid := current_setting('test.list_id')::uuid; n int; item uuid; who uuid; names int;
 begin
   select count(*) into n from public.shopping_lists where id = lid;
   assert n = 1, 'member must see the list';

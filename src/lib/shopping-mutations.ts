@@ -8,9 +8,10 @@
 // applies it is registered once at start-up with registerShoppingMutationDefaults,
 // instead of being a closure inside a component.
 //
-// All edits here are absolute ("this item is ticked", "the amount is 3", "delete
-// these rows"), so sending one twice is harmless. Adding an item is not like that
-// and stays online-only for now.
+// All edits here are safe to send twice. Most are absolute ("this item is ticked",
+// "the amount is 3", "delete these rows"). Adding an item is made safe by giving it an
+// id on the phone: a second insert with the same id is rejected by the primary key,
+// and that rejection is treated as "already there".
 
 import type { QueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
@@ -29,6 +30,7 @@ export const MUTATION = {
   deleteItems: [...QUEUED_PREFIX, 'deleteItems'],
   clearChecked: [...QUEUED_PREFIX, 'clearChecked'],
   editRows: [...QUEUED_PREFIX, 'editRows'],
+  addItem: [...QUEUED_PREFIX, 'addItem'],
 } as const
 
 /** Edits to the rows of one list run one after the other, in the order they were made. */
@@ -38,14 +40,25 @@ export interface RowEdit {
   /** Each update rewrites one row (conversion, merge, undo, new amount or unit). */
   updates: RowUpdate[]
   /** Rows a decrease used up. */
-  deleteIds?: number[]
+  deleteIds?: string[]
 }
 
-export type SetCheckedVars = { listId: string; ids: number[]; checked: boolean }
-export type SetAisleVars = { listId: string; ids: number[]; aisle: string }
-export type DeleteItemsVars = { listId: string; ids: number[] }
+/** An item typed by hand. `id` is made on the phone, so the item exists before the server has seen it. */
+export interface NewItemRow {
+  id: string
+  name: string
+  amount: number | null
+  unit: string | null
+  food_id: number | null
+  aisle: string
+}
+
+export type SetCheckedVars = { listId: string; ids: string[]; checked: boolean }
+export type SetAisleVars = { listId: string; ids: string[]; aisle: string }
+export type DeleteItemsVars = { listId: string; ids: string[] }
 export type ClearCheckedVars = { listId: string }
 export type EditRowsVars = { listId: string } & RowEdit
+export type AddItemVars = { listId: string; item: NewItemRow }
 
 // ---------- how the cached list changes (pure) ----------
 
@@ -59,6 +72,37 @@ export const patchDeleteItems = (items: ShoppingItem[], { ids }: DeleteItemsVars
   items.filter((i) => !ids.includes(i.id))
 
 export const patchClearChecked = (items: ShoppingItem[]): ShoppingItem[] => items.filter((i) => !i.checked)
+
+/**
+ * The new item shows up at once. `seq` is a stand-in that sorts it last (the real one is
+ * counted by the database); the refresh after sending replaces it.
+ */
+export const patchAddItem = (items: ShoppingItem[], { listId, item }: AddItemVars): ShoppingItem[] =>
+  items.some((i) => i.id === item.id)
+    ? items
+    : [
+        ...items,
+        {
+          id: item.id,
+          seq: Date.now(),
+          list_id: listId,
+          created_at: new Date().toISOString(),
+          name: item.name,
+          amount: item.amount,
+          amount_max: null,
+          unit: item.unit,
+          food_id: item.food_id,
+          aisle: item.aisle,
+          checked: false,
+          checked_by: null,
+          recipe_id: null,
+          recipe_title: null,
+          position: 0,
+          orig_amount: null,
+          orig_amount_max: null,
+          orig_unit: null,
+        },
+      ]
 
 export const patchEditRows = (items: ShoppingItem[], { updates, deleteIds = [] }: EditRowsVars): ShoppingItem[] =>
   items
@@ -86,6 +130,11 @@ const runDeleteItems = async ({ ids }: DeleteItemsVars) => {
 }
 const runClearChecked = async ({ listId }: ClearCheckedVars) => {
   must(await supabase.from('shopping_list_items').delete().eq('list_id', listId).eq('checked', true))
+}
+const runAddItem = async ({ listId, item }: AddItemVars) => {
+  const { error } = await supabase.from('shopping_list_items').insert({ list_id: listId, ...item })
+  // 23505 = the id is already there: an earlier attempt got through and only the answer was lost.
+  if (error && (error as { code?: string }).code !== '23505') throw error
 }
 const runEditRows = async ({ updates, deleteIds = [] }: EditRowsVars) => {
   const results = await Promise.all([
@@ -137,4 +186,5 @@ export function registerShoppingMutationDefaults(qc: QueryClient): void {
   define<DeleteItemsVars>(MUTATION.deleteItems, runDeleteItems, patchDeleteItems)
   define<ClearCheckedVars>(MUTATION.clearChecked, runClearChecked, patchClearChecked)
   define<EditRowsVars>(MUTATION.editRows, runEditRows, patchEditRows)
+  define<AddItemVars>(MUTATION.addItem, runAddItem, patchAddItem)
 }

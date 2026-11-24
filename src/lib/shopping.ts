@@ -12,6 +12,7 @@ import {
   MUTATION,
   itemsKey,
   scopeOf,
+  type AddItemVars,
   type ClearCheckedVars,
   type DeleteItemsVars,
   type EditRowsVars,
@@ -245,7 +246,7 @@ export function useShoppingItems(listId: string | undefined) {
         .select('*')
         .eq('list_id', listId!)
         .order('position')
-        .order('id')
+        .order('seq') // creation order; ids are random UUIDs
       if (error) throw error
       return data.map(toItem)
     },
@@ -264,18 +265,17 @@ export interface NewItem {
   recipe_title?: string | null
 }
 
+/**
+ * Add a typed item. It works offline: the item gets an id here on the phone, appears at
+ * once, and is sent when the network allows (see shopping-mutations.ts).
+ */
 export function useAddItem(listId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (item: NewItem) => {
-      const { error } = await supabase.from('shopping_list_items').insert({ list_id: listId, ...item })
-      if (error) throw error
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: itemsKey(listId) })
-      void qc.invalidateQueries({ queryKey: ['shopping', 'counts'] })
-    },
-  })
+  const m = useMutation<void, unknown, AddItemVars>({ mutationKey: MUTATION.addItem, scope: scopeOf(listId) })
+  return {
+    ...m,
+    mutate: (item: Pick<NewItem, 'name' | 'amount' | 'unit' | 'food_id' | 'aisle'>) =>
+      m.mutate({ listId, item: { id: crypto.randomUUID(), ...item } }),
+  }
 }
 
 /** Rows of one recipe already on a list (so the UI can say it will be replaced). */
@@ -336,7 +336,7 @@ export function useSetAisle(listId: string) {
 
 export function useDeleteItems(listId: string) {
   const m = useMutation<void, unknown, DeleteItemsVars>({ mutationKey: MUTATION.deleteItems, scope: scopeOf(listId) })
-  return { ...m, mutate: (ids: number[]) => m.mutate({ listId, ids }) }
+  return { ...m, mutate: (ids: string[]) => m.mutate({ listId, ids }) }
 }
 
 export function useClearChecked(listId: string) {

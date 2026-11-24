@@ -20,8 +20,10 @@ import {
 
 let nextId = 1
 function item(p: Partial<MergeItem> & Pick<MergeItem, 'name'>): MergeItem {
+  const n = nextId++
   return {
-    id: nextId++,
+    id: `row-${n}`, // ids are UUID strings; creation order is `seq`
+    seq: n,
     amount: null,
     amount_max: null,
     unit: null,
