@@ -21,7 +21,7 @@ function Overlay({ label, onClose, children }: { label: string; onClose: () => v
       className="fixed inset-0 z-20 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="max-h-[90vh] w-full max-w-xl space-y-3 overflow-auto rounded-t-lg bg-card p-4 shadow-lg sm:rounded-lg">
+      <div className="max-h-[90vh] w-full max-w-xl space-y-3 overflow-auto rounded-t-lg bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg sm:rounded-lg">
         {children}
       </div>
     </div>

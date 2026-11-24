@@ -127,7 +127,7 @@ export default function AddToList({
       className="fixed inset-0 z-20 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-auto rounded-t-lg bg-card p-4 shadow-lg sm:rounded-lg">
+      <div className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-auto rounded-t-lg bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg sm:rounded-lg">
         <div>
           <h2 className="text-xl font-bold">Legg til i handleliste</h2>
           <p className="text-sm text-muted-foreground">{recipe.title}</p>

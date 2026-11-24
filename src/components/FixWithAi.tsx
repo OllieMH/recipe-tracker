@@ -186,7 +186,7 @@ function Panel({ children, onClose }: { children: React.ReactNode; onClose: () =
     <div role="dialog" aria-modal="true" aria-label="Fiks med AI"
       className="fixed inset-0 z-20 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-t-lg bg-card p-4 shadow-lg sm:rounded-lg">
+      <div className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-t-lg bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg sm:rounded-lg">
         <h2 className="mb-3 text-xl font-bold">Fiks med AI</h2>
         {children}
       </div>
