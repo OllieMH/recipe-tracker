@@ -394,6 +394,9 @@ export type Database = {
           id: number
           list_id: string
           name: string
+          orig_amount: number | null
+          orig_amount_max: number | null
+          orig_unit: string | null
           position: number
           recipe_id: string | null
           recipe_title: string | null
@@ -411,6 +414,9 @@ export type Database = {
           id?: never
           list_id: string
           name: string
+          orig_amount?: number | null
+          orig_amount_max?: number | null
+          orig_unit?: string | null
           position?: number
           recipe_id?: string | null
           recipe_title?: string | null
@@ -428,6 +434,9 @@ export type Database = {
           id?: never
           list_id?: string
           name?: string
+          orig_amount?: number | null
+          orig_amount_max?: number | null
+          orig_unit?: string | null
           position?: number
           recipe_id?: string | null
           recipe_title?: string | null
