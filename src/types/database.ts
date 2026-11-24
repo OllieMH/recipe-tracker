@@ -54,6 +54,35 @@ export type Database = {
         }
         Relationships: []
       }
+      aisle_overrides: {
+        Row: {
+          aisle: string
+          name_key: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          aisle: string
+          name_key: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          aisle?: string
+          name_key?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aisle_overrides_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       favorites: {
         Row: {
           created_at: string
@@ -619,6 +648,10 @@ export type Database = {
         Returns: undefined
       }
       save_recipe: { Args: { payload: Json }; Returns: string }
+      set_aisle_override: {
+        Args: { p_aisle: string; p_key: string }
+        Returns: undefined
+      }
       share_list: {
         Args: { p_email: string; p_list_id: string }
         Returns: string

@@ -4,6 +4,7 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
+import { overrideKey } from './aisle-overrides'
 import type { Database } from '@/types/database'
 import type { Food } from './foods'
 import type { MergeItem, RowUpdate } from './shopping-merge'
@@ -336,6 +337,18 @@ export function useSetChecked(listId: string) {
   )
 }
 
+/** Move items to another store section (the food database does not know every product). */
+export function useSetAisle(listId: string) {
+  return useOptimisticItems<{ ids: number[]; aisle: string }>(
+    listId,
+    async ({ ids, aisle }) => {
+      const { error } = await supabase.from('shopping_list_items').update({ aisle }).in('id', ids)
+      if (error) throw error
+    },
+    (items, { ids, aisle }) => items.map((i) => (ids.includes(i.id) ? { ...i, aisle } : i)),
+  )
+}
+
 export function useDeleteItems(listId: string) {
   return useOptimisticItems<number[]>(
     listId,
@@ -399,6 +412,31 @@ export function useAisleMap() {
       if (error) throw error
       return new Map(data.map((r) => [r.category, r.aisle]))
     },
+  })
+}
+
+/** Shared corrections ("sitronsaft" -> Krydder og saus). Small table, refreshed now and then. */
+export function useAisleOverrides() {
+  return useQuery({
+    queryKey: ['aisle-overrides'],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<Map<string, string>> => {
+      const { data, error } = await supabase.from('aisle_overrides').select('name_key, aisle')
+      if (error) throw error
+      return new Map(data.map((r) => [r.name_key, r.aisle]))
+    },
+  })
+}
+
+/** Save a correction for everyone. Failing to save is not worth bothering the user about. */
+export function useSetAisleOverride() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ name, aisle }: { name: string; aisle: string }) => {
+      const { error } = await supabase.rpc('set_aisle_override', { p_key: overrideKey(name), p_aisle: aisle })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['aisle-overrides'] }),
   })
 }
 

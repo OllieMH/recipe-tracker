@@ -43,8 +43,8 @@ export function recipeToListItems(
     factor: number
     unitMode: UnitMode
     measuresByFood: ReadonlyMap<number, Measures> | undefined
-    /** Store aisle for a food id (or "Annet" when unknown). */
-    aisleOf: (foodId: number | null) => string
+    /** Store aisle for an ingredient (by food id, or by name when the user has corrected it before). */
+    aisleOf: (foodId: number | null, name: string) => string
     /** foods.category for a food id, used to decide between volume and weight. */
     categoryOf: (foodId: number | null) => string | null
   },
@@ -68,7 +68,7 @@ export function recipeToListItems(
           amount_max: shown.amountMax,
           unit: shown.unit,
           food_id: ing.food_id,
-          aisle: opts.aisleOf(ing.food_id),
+          aisle: opts.aisleOf(ing.food_id, ing.name),
           recipe_id: recipe.id,
           recipe_title: recipe.title,
         },

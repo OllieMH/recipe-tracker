@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, BookOpen, Pencil, Plus, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
+import { overrideFor } from '@/lib/aisle-overrides'
 import { autoMatchFood, useFoods } from '@/lib/foods'
 import { useMeasures } from '@/lib/recipes'
 import { parseQuickAdd } from '@/lib/quick-add'
@@ -9,6 +10,7 @@ import {
   aisleFor,
   useAddItem,
   useAisleMap,
+  useAisleOverrides,
   useClearChecked,
   useDeleteItems,
   useDeleteList,
@@ -16,6 +18,8 @@ import {
   useListMembers,
   useListRealtime,
   useRenameList,
+  useSetAisle,
+  useSetAisleOverride,
   useSetChecked,
   useShoppingItems,
   useShoppingList,
@@ -79,9 +83,12 @@ export default function ShoppingListPage() {
   useListRealtime(id)
   const foods = useFoods()
   const aisleMap = useAisleMap()
+  const overrides = useAisleOverrides()
+  const saveOverride = useSetAisleOverride()
 
   const addItem = useAddItem(id)
   const setChecked = useSetChecked(id)
+  const setAisle = useSetAisle(id)
   const deleteItems = useDeleteItems(id)
   const clearChecked = useClearChecked(id)
   const editRows = useEditRows(id)
@@ -123,7 +130,7 @@ export default function ShoppingListPage() {
   }, [items])
 
   const checkedRows = items.filter((i) => i.checked).length
-  const mutationError = [addItem, setChecked, deleteItems, clearChecked, editRows, rename, deleteList].find((m) => m.isError)
+  const mutationError = [addItem, setChecked, setAisle, deleteItems, clearChecked, editRows, rename, deleteList].find((m) => m.isError)
 
   if (list.isLoading) return <main className="p-4 text-sm text-muted-foreground">Laster …</main>
   if (!list.data) {
@@ -149,7 +156,8 @@ export default function ShoppingListPage() {
         amount: parsed.amount,
         unit: parsed.unit,
         food_id: food?.id ?? null,
-        aisle: aisleFor(food, aisleMap.data),
+        // a section someone chose for this name before beats the food database's guess
+        aisle: overrideFor(overrides.data, parsed.name) ?? aisleFor(food, aisleMap.data),
       },
       {
         onSuccess: () => {
@@ -189,6 +197,11 @@ export default function ShoppingListPage() {
       onUndo={() => edit(undoUpdates([line]))}
       onConvert={(unit) => edit(convertLines([line], unit, measures.data))}
       onSetUnit={(unit) => edit(relabelLine(line, unit))}
+      onSetAisle={(aisle) => {
+        setAisle.mutate({ ids: line.items.map((r) => r.id), aisle })
+        // share the correction so the next person adding this gets the right section
+        for (const name of new Set(line.items.map((r) => r.name))) saveOverride.mutate({ name, aisle })
+      }}
       onSetAmount={(amount, unit) => {
         const adj = line.amount == null ? giveAmount(line, amount, unit) : adjustLine(line, amount)
         edit(adj.updates, adj.deleteIds)

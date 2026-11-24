@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Check, Minus, Plus, Trash2, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import {
+  AISLE_ORDER,
   CANONICAL_UNITS,
   conversionOptions,
   formatDecimal,
@@ -29,6 +30,8 @@ interface Props {
   onSetUnit: (unit: string) => void
   /** Set the total. For a line without an amount, `unit` is the chosen unit. */
   onSetAmount: (amount: number, unit: string | null) => void
+  /** Move the item to another store section. */
+  onSetAisle: (aisle: string) => void
 }
 
 const chip =
@@ -41,7 +44,10 @@ const parseAmount = (s: string): number | null => {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-export default function ShoppingLineRow({ line, note, measures, onToggle, onRemove, onUndo, onConvert, onSetUnit, onSetAmount }: Props) {
+export default function ShoppingLineRow({
+  line, note, measures, onToggle, onRemove, onUndo, onConvert, onSetUnit, onSetAmount, onSetAisle,
+}: Props) {
+  const aisleId = useId()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [pendingUnit, setPendingUnit] = useState<string | null>(null)
@@ -244,6 +250,20 @@ export default function ShoppingLineRow({ line, note, measures, onToggle, onRemo
               <Undo2 className="size-4" /> Angre enhetsendring
             </button>
           )}
+
+          <div className="flex items-center gap-2">
+            <label htmlFor={aisleId} className="text-xs text-muted-foreground">Avdeling:</label>
+            <Select
+              id={aisleId}
+              className="w-auto min-w-44"
+              value={line.aisle}
+              onChange={(e) => { onSetAisle(e.target.value); setEditing(false) }}
+            >
+              {[...new Set([...AISLE_ORDER, line.aisle])].map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </Select>
+          </div>
 
           {hasAmount && line.unit != null && (
             <div className="flex flex-wrap items-center gap-2">

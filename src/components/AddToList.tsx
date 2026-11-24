@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import type { Measures } from '@/lib/conversion'
 import { formatNumber, scaleFactor } from '@/lib/scaling'
+import { overrideFor } from '@/lib/aisle-overrides'
 import { useFoods } from '@/lib/foods'
 import { recipeToListItems, type ListableRecipe, type UnitMode } from '@/lib/recipe-to-list'
 import { formatLineAmount } from '@/lib/shopping-merge'
@@ -9,6 +10,7 @@ import {
   aisleFor,
   useAddRecipeToList,
   useAisleMap,
+  useAisleOverrides,
   useCreateList,
   useRecipeRows,
   useShoppingLists,
@@ -42,6 +44,7 @@ export default function AddToList({
   const lists = useShoppingLists()
   const foods = useFoods()
   const aisleMap = useAisleMap()
+  const overrides = useAisleOverrides()
   const createList = useCreateList()
   const addRecipe = useAddRecipeToList()
 
@@ -75,10 +78,11 @@ export default function AddToList({
         factor,
         unitMode,
         measuresByFood: measures,
-        aisleOf: (id) => aisleFor(id != null ? foodById.get(id) : null, aisleMap.data),
+        aisleOf: (id, name) =>
+          overrideFor(overrides.data, name) ?? aisleFor(id != null ? foodById.get(id) : null, aisleMap.data),
         categoryOf: (id) => (id != null ? (foodById.get(id)?.category ?? null) : null),
       }),
-    [recipe, factor, unitMode, measures, foodById, aisleMap.data],
+    [recipe, factor, unitMode, measures, foodById, aisleMap.data, overrides.data],
   )
 
   const existing = useRecipeRows(listId === 'new' ? undefined : listId, recipe.id)

@@ -387,6 +387,29 @@ begin
   set local role authenticated;
 end $$;
 
+-- shared section corrections (needs the 20261124000006_aisle_overrides migration)
+select set_config('request.jwt.claims',
+  '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated"}', true);
+do $$
+declare ok boolean;
+begin
+  perform public.set_aisle_override('sitronsaft', 'Krydder og saus');
+  assert (select aisle from public.aisle_overrides where name_key = 'sitronsaft') = 'Krydder og saus',
+    'a correction must be saved and readable';
+  perform public.set_aisle_override('sitronsaft', 'Drikke');
+  assert (select count(*) from public.aisle_overrides where name_key = 'sitronsaft') = 1, 'one row per name; last correction wins';
+
+  ok := false;
+  begin insert into public.aisle_overrides (name_key, aisle) values ('x', 'Annet');
+  exception when insufficient_privilege then ok := true; end;
+  assert ok, 'direct writes to aisle_overrides must be blocked';
+
+  ok := false;
+  begin perform public.set_aisle_override('mel', 'Finnes ikke');
+  exception when invalid_parameter_value then ok := true; end;
+  assert ok, 'an unknown section must be rejected';
+end $$;
+
 reset role;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 set local role anon;
@@ -438,6 +461,10 @@ begin
   begin
     perform public.create_list('anon list');
     raise exception 'anon executed create_list';
+  exception when insufficient_privilege then null; end;
+  begin
+    select count(*) into n from public.aisle_overrides;
+    raise exception 'anon read aisle_overrides';
   exception when insufficient_privilege then null; end;
 end $$;
 
