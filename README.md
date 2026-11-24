@@ -1,13 +1,47 @@
 # Kokebok
 
 Private, invite-only recipe collection (Norwegian UI). Paste a recipe from any
-site, an LLM turns it into structured data, and you can scale, convert, edit,
-copy, print and export it. Shopping lists can be shared and work offline.
+site, or send photos or screenshots of one, and an LLM turns it into structured
+data. You can also write a recipe by hand. Scale, convert, edit, copy, print and
+export it. Shopping lists can be shared and work offline.
 
 ## Stack
 
 Vite + React + TypeScript on Vercel. Supabase for Postgres (with RLS), auth,
 storage and Edge Functions. Gemini for recipe import.
+
+## Adding recipes
+
+"Ny oppskrift" (`/ny`, the old `/importer` redirects there) has three ways in, and
+all of them end in the same review-and-edit form before anything is saved:
+
+- **Lim inn tekst:** text copied from a web page.
+- **Fra bilde:** up to 10 photos or screenshots, read in the order shown as pages
+  of one recipe. Each image is made upright, scaled to 2000 px and compressed to
+  about 600 KB JPEG on the device first (`prepareForAi` in `src/lib/images.ts`).
+  The photos are not kept and do not become the recipe picture; that is chosen
+  separately on the review screen.
+- **Skriv selv:** a blank form. Ingredients can be pasted one per line
+  ("2 dl melk") and moved up or down.
+
+The `import-recipe` Edge Function takes `{text?, images?, translate}`. Image
+limits (`supabase/functions/_shared/image-input.ts`): 10 images, about 3 MB each
+and 10 MB in total as base64. Both text and photo imports count towards
+`IMPORT_DAILY_LIMIT` (30 per user per day, failed attempts included).
+
+### Gemini limits and models
+
+- Default model `gemini-3.8-flash`; `GEMINI_FALLBACK_MODELS` lists the models
+  tried next. A model that is out of quota (429) is skipped at once, an overloaded
+  one (503) gets two tries. Each Gemini call times out after 50 s and the whole
+  request after 125 s, under Supabase's 150 s limit, so a stuck model gives a
+  "travel" message instead of a silent failure.
+- The free tier allows only about 20 requests per day on the newer models, and
+  failed requests count. Billing is enabled on the Google project, which lifted
+  these limits. Keep a budget alert on it.
+- Rough cost on `gemini-3.8-flash`: about 1 cent per import, text or photos.
+- Images and text are sent to Google, like pasted text always was. Check
+  Google's terms for paid Gemini API use before inviting people outside the EEA.
 
 ## Installable app and offline use
 
