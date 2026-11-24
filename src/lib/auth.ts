@@ -53,6 +53,14 @@ export async function signOut() {
   if (error) throw error
 }
 
+/** Send a password-reset email. The link lands on /sett-passord. */
+export async function requestPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/sett-passord`,
+  })
+  if (error) throw error
+}
+
 export async function updatePassword(password: string) {
   const { error } = await supabase.auth.updateUser({ password })
   if (error) throw error

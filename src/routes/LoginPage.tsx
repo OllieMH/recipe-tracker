@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
-import { authErrorMessage, signIn, useAuth } from '@/lib/auth'
+import { authErrorMessage, requestPasswordReset, signIn, useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,8 +20,63 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [resetMode, setResetMode] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
 
   if (user) return <Navigate to={from} replace />
+
+  async function onReset(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    const parsed = z.email('Skriv inn en gyldig e-postadresse.').safeParse(email.trim())
+    if (!parsed.success) {
+      setError(parsed.error.issues[0].message)
+      return
+    }
+    setBusy(true)
+    try {
+      await requestPasswordReset(parsed.data)
+      setResetSent(true)
+    } catch (err) {
+      setError(authErrorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (resetMode) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-4">
+        <form onSubmit={onReset} className="w-full max-w-sm space-y-4">
+          <h1 className="text-3xl font-extrabold tracking-tight">Glemt passord</h1>
+          {resetSent ? (
+            <p className="prose-recipe">
+              Hvis e-postadressen er registrert, har vi sendt en lenke for å velge nytt passord.
+            </p>
+          ) : (
+            <>
+              <p className="prose-recipe text-muted-foreground">
+                Skriv inn e-posten din, så sender vi en lenke for å velge nytt passord.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="reset-email">E-post</Label>
+                <Input id="reset-email" type="email" autoComplete="email" value={email}
+                  onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? 'Sender …' : 'Send lenke'}
+              </Button>
+            </>
+          )}
+          <button type="button" className="text-sm underline"
+            onClick={() => { setResetMode(false); setResetSent(false); setError(null) }}>
+            Tilbake til innlogging
+          </button>
+        </form>
+      </main>
+    )
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -61,6 +116,10 @@ export default function LoginPage() {
         <Button type="submit" className="w-full" disabled={busy}>
           {busy ? 'Logger inn …' : 'Logg inn'}
         </Button>
+        <button type="button" className="text-sm underline"
+          onClick={() => { setResetMode(true); setError(null) }}>
+          Glemt passord?
+        </button>
         <p className="text-xs text-muted-foreground">
           Tilgang kun etter invitasjon. Har du ikke fått en, ta kontakt med administrator.
         </p>
