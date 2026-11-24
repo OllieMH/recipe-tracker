@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Check, MoreHorizontal, Minus, Plus, Trash2, Undo2 } from 'lucide-react'
+import { Check, Minus, Plus, Trash2, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,7 +40,6 @@ const parseAmount = (s: string): number | null => {
 }
 
 export default function ShoppingLineRow({ line, measures, onToggle, onRemove, onUndo, onConvert, onSetUnit, onSetAmount }: Props) {
-  const [menu, setMenu] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [pendingUnit, setPendingUnit] = useState<string | null>(null)
@@ -48,14 +47,23 @@ export default function ShoppingLineRow({ line, measures, onToggle, onRemove, on
   const options = useMemo(() => conversionOptions(line, measures), [line, measures])
   const amount = formatLineAmount(line)
   const hasAmount = line.amount != null
-  const unitless = hasAmount && line.unit == null
   const step = stepFor(line.unit)
+  // A range ("1–2 dl") has no single number to nudge; use the editor for those.
+  const isRange = line.amountMax != null && line.amountMax > (line.amount ?? 0)
+
+  /** The simple − / + on the row: one unit-sized step. A line without an amount starts at 1. */
+  function nudge(dir: 1 | -1) {
+    if (line.amount == null) {
+      if (dir === 1) onSetAmount(1, null)
+      return
+    }
+    onSetAmount(Math.round((line.amount + dir * step) * 100) / 100, line.unit)
+  }
 
   function openEditor() {
     setDraft(line.amount != null ? formatDecimal(line.amount, line.unit) : '')
     setPendingUnit(null)
     setEditing((e) => !e)
-    setMenu(false)
   }
 
   function stepDraft(dir: 1 | -1) {
@@ -119,29 +127,38 @@ export default function ShoppingLineRow({ line, measures, onToggle, onRemove, on
           onClick={openEditor}
           aria-expanded={editing}
           title="Endre mengde og enhet"
-          className="min-w-0 flex-1 rounded-md px-1 py-2 text-left hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-2 text-left hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
         >
-          <span className={cn('block leading-snug', line.checked && 'text-muted-foreground line-through')}>
-            {hasAmount ? (
-              <span className="mr-1.5 font-semibold text-berry">{amount}</span>
-            ) : (
-              <span className="mr-1.5 text-xs text-muted-foreground underline">mengde</span>
+          <span className="min-w-0 flex-1">
+            <span className={cn('block break-words leading-snug', line.checked && 'text-muted-foreground line-through')}>
+              {line.name}
+            </span>
+            {line.recipes.length > 0 && (
+              <span className="block text-xs text-muted-foreground">fra {line.recipes.join(', ')}</span>
             )}
-            {line.name}
           </span>
-          {line.recipes.length > 0 && (
-            <span className="block text-xs text-muted-foreground">fra {line.recipes.join(', ')}</span>
+          {hasAmount ? (
+            <span
+              className={cn(
+                'shrink-0 whitespace-nowrap font-semibold',
+                line.checked ? 'text-muted-foreground line-through' : 'text-berry',
+              )}
+            >
+              {amount}
+            </span>
+          ) : (
+            <span className="shrink-0 text-xs text-muted-foreground underline">mengde</span>
           )}
         </button>
 
-        {unitless && !line.checked && (
+        {!line.checked && (
           <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               aria-label={`Færre ${line.name}`}
               className={stepBtn}
-              disabled={(line.amount as number) - 1 <= 0}
-              onClick={() => onSetAmount((line.amount as number) - 1, null)}
+              disabled={!hasAmount || isRange || (line.amount as number) - step <= 0}
+              onClick={() => nudge(-1)}
             >
               <Minus className="size-4" />
             </button>
@@ -149,7 +166,8 @@ export default function ShoppingLineRow({ line, measures, onToggle, onRemove, on
               type="button"
               aria-label={`Flere ${line.name}`}
               className={stepBtn}
-              onClick={() => onSetAmount((line.amount as number) + 1, null)}
+              disabled={isRange}
+              onClick={() => nudge(1)}
             >
               <Plus className="size-4" />
             </button>
@@ -158,27 +176,13 @@ export default function ShoppingLineRow({ line, measures, onToggle, onRemove, on
 
         <button
           type="button"
-          aria-label={`Flere valg for ${line.name}`}
-          aria-expanded={menu}
-          onClick={() => { setMenu((m) => !m); setEditing(false) }}
-          className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+          aria-label={`Fjern ${line.name}`}
+          onClick={onRemove}
+          className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-destructive"
         >
-          <MoreHorizontal className="size-5" />
+          <Trash2 className="size-5" />
         </button>
       </div>
-
-      {menu && (
-        <div className="flex flex-wrap gap-2 pb-2 pl-12">
-          {line.canUndo && (
-            <button type="button" className={cn(chip, 'inline-flex items-center gap-1.5')} onClick={() => { onUndo(); setMenu(false) }}>
-              <Undo2 className="size-4" /> Angre enhetsendring
-            </button>
-          )}
-          <button type="button" className={cn(chip, 'inline-flex items-center gap-1.5 text-destructive')} onClick={onRemove}>
-            <Trash2 className="size-4" /> Fjern
-          </button>
-        </div>
-      )}
 
       {editing && (
         <div role="group" aria-label={`Endre ${line.name}`} className="space-y-3 pb-3 pl-12 pr-2">
@@ -227,6 +231,16 @@ export default function ShoppingLineRow({ line, measures, onToggle, onRemove, on
             )}
             <Button size="sm" onClick={save} disabled={parseAmount(draft) == null}>Ferdig</Button>
           </div>
+
+          {line.canUndo && (
+            <button
+              type="button"
+              className={cn(chip, 'inline-flex items-center gap-1.5')}
+              onClick={() => { onUndo(); setEditing(false) }}
+            >
+              <Undo2 className="size-4" /> Angre enhetsendring
+            </button>
+          )}
 
           {hasAmount && line.unit != null && (
             <div className="flex flex-wrap items-center gap-2">

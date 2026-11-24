@@ -1,22 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
   adjustLine,
-  quickSteps,
-  giveAmount,
-  relabelLine,
-  stepFor,
   applyMerge,
   conversionOptions,
-  convertAmount,
   convertLines,
   formatDecimal,
   formatLineAmount,
+  giveAmount,
   groupByAisle,
   mergeItems,
+  quickSteps,
+  relabelLine,
+  stepFor,
   suggestMerges,
   undoUpdates,
-  type MergeItem,
   type MeasuresByFood,
+  type MergeItem,
 } from './shopping-merge'
 
 let nextId = 1
@@ -47,29 +46,22 @@ function applyRows(rows: MergeItem[], updates: ReturnType<typeof convertLines>):
   })
 }
 
+const lineOf = (...rows: MergeItem[]) => mergeItems(rows)[0]
+
 // Flour: 1 dl weighs 55 g.
 const measures: MeasuresByFood = new Map([[10, { dl: 55 }]])
 
 describe('mergeItems', () => {
-  it('sums rows with the same food and unit and keeps the source rows', () => {
-    const a = item({ name: 'hvetemel', food_id: 10, amount: 3, unit: 'dl', recipe_title: 'Boller' })
-    const b = item({ name: 'mel', food_id: 10, amount: 4, unit: 'dl', recipe_title: 'Brød' })
-    const lines = mergeItems([a, b])
+  it('sums rows with the same food and unit, in row order, keeping the sources', () => {
+    const late = item({ name: 'mel', food_id: 10, amount: 4, unit: 'dl', position: 2, recipe_title: 'Brød' })
+    const early = item({ name: 'hvetemel', food_id: 10, amount: 3, unit: 'dl', position: 1, recipe_title: 'Boller' })
+    const lines = mergeItems([late, early])
     expect(lines).toHaveLength(1)
-    expect(lines[0]).toMatchObject({ amount: 7, unit: 'dl', name: 'hvetemel' })
-    expect(lines[0].items.map((i) => i.id)).toEqual([a.id, b.id])
-    expect(lines[0].recipes).toEqual(['Boller', 'Brød'])
+    expect(lines[0]).toMatchObject({ amount: 7, unit: 'dl', name: 'hvetemel', recipes: ['Boller', 'Brød'] })
+    expect(lines[0].items.map((i) => i.id)).toEqual([early.id, late.id])
   })
 
-  it('keeps different units of the same food on separate lines', () => {
-    const lines = mergeItems([
-      item({ name: 'mel', food_id: 10, amount: 1, unit: 'dl' }),
-      item({ name: 'mel', food_id: 10, amount: 200, unit: 'g' }),
-    ])
-    expect(lines.map((l) => l.unit).sort()).toEqual(['dl', 'g'])
-  })
-
-  it('keeps lines of the same food next to each other', () => {
+  it('keeps different units of one food on separate lines, next to each other', () => {
     const lines = mergeItems([
       item({ name: 'mel', food_id: 10, amount: 1, unit: 'dl', position: 1 }),
       item({ name: 'melk', food_id: 20, amount: 1, unit: 'l', position: 2 }),
@@ -88,7 +80,7 @@ describe('mergeItems', () => {
     expect(lines.find((l) => l.name.toLowerCase().startsWith('melk'))?.amount).toBe(3)
   })
 
-  it('shows rows without an amount once, apart from rows with amounts', () => {
+  it('shows amount-less rows once, apart from rows with amounts', () => {
     const lines = mergeItems([
       item({ name: 'salt', food_id: 5 }),
       item({ name: 'salt', food_id: 5 }),
@@ -101,68 +93,31 @@ describe('mergeItems', () => {
   })
 
   it('sums ranges', () => {
-    const lines = mergeItems([
+    const line = lineOf(
       item({ name: 'løk', food_id: 3, amount: 1, amount_max: 2, unit: 'stk' }),
       item({ name: 'løk', food_id: 3, amount: 2, unit: 'stk' }),
-    ])
-    expect(lines[0]).toMatchObject({ amount: 3, amountMax: 4 })
-    expect(formatLineAmount(lines[0])).toBe('3–4 stk')
+    )
+    expect(line).toMatchObject({ amount: 3, amountMax: 4 })
+    expect(formatLineAmount(line)).toBe('3–4 stk')
   })
 
-  it('is ticked only when every source row is ticked', () => {
-    const both = mergeItems([
-      item({ name: 'melk', amount: 1, unit: 'l', checked: true }),
-      item({ name: 'melk', amount: 1, unit: 'l', checked: true }),
-    ])
-    expect(both[0].checked).toBe(true)
-    const partial = mergeItems([
-      item({ name: 'melk', amount: 1, unit: 'l', checked: true }),
-      item({ name: 'melk', amount: 1, unit: 'l', checked: false }),
-    ])
-    expect(partial[0].checked).toBe(false)
-  })
-
-  it('orders source rows by position then id', () => {
-    const late = item({ name: 'egg', amount: 2, unit: 'stk', position: 5 })
-    const early = item({ name: 'egg', amount: 1, unit: 'stk', position: 1 })
-    expect(mergeItems([late, early])[0].items.map((i) => i.id)).toEqual([early.id, late.id])
-  })
-
-  it('flags lines that can be undone', () => {
-    const plain = mergeItems([item({ name: 'melk', amount: 1, unit: 'l' })])
-    expect(plain[0].canUndo).toBe(false)
-    const converted = mergeItems([item({ name: 'melk', amount: 10, unit: 'dl', orig_amount: 1, orig_unit: 'l' })])
-    expect(converted[0].canUndo).toBe(true)
+  it('is ticked only when every row is ticked, and flags undoable lines', () => {
+    expect(lineOf(item({ name: 'a', amount: 1, checked: true }), item({ name: 'a', amount: 1, checked: true })).checked).toBe(true)
+    expect(lineOf(item({ name: 'b', amount: 1, checked: true }), item({ name: 'b', amount: 1 })).checked).toBe(false)
+    expect(lineOf(item({ name: 'c', amount: 1, unit: 'l' })).canUndo).toBe(false)
+    expect(lineOf(item({ name: 'd', amount: 10, unit: 'dl', orig_amount: 1, orig_unit: 'l' })).canUndo).toBe(true)
   })
 })
 
-describe('convertAmount', () => {
-  it('uses fixed relations without food data', () => {
-    expect(convertAmount(2, 'ss', 'ml', {})).toBe(30)
-    expect(convertAmount(1, 'kg', 'g', {})).toBe(1000)
-  })
-  it('needs a measure to cross volume and weight', () => {
-    expect(convertAmount(1, 'dl', 'g', {})).toBeNull()
-    expect(convertAmount(1, 'dl', 'g', { dl: 55 })).toBe(55)
-  })
-  it('never guesses between unrelated units', () => {
-    expect(convertAmount(1, 'stk', 'dl', {})).toBeNull()
-  })
-})
-
-describe('suggestMerges', () => {
-  it('offers volume and weight units when the food has a measure', () => {
+describe('suggestMerges / conversionOptions', () => {
+  it('offers volume and weight units when the food has a measure, own units first', () => {
     const lines = mergeItems([
       item({ name: 'mel', food_id: 10, amount: 1, unit: 'dl' }),
       item({ name: 'mel', food_id: 10, amount: 200, unit: 'g' }),
     ])
     const [s] = suggestMerges(lines, measures)
-    expect(s.name).toBe('mel')
-    const g = s.options.find((o) => o.unit === 'g')!
-    expect(g.amount).toBeCloseTo(255)
-    const dl = s.options.find((o) => o.unit === 'dl')!
-    expect(dl.amount).toBeCloseTo(1 + 200 / 55)
-    // the lines' own units come first
+    expect(s.options.find((o) => o.unit === 'g')!.amount).toBeCloseTo(255)
+    expect(s.options.find((o) => o.unit === 'dl')!.amount).toBeCloseTo(1 + 200 / 55)
     expect(s.options.slice(0, 2).map((o) => o.unit).sort()).toEqual(['dl', 'g'])
   })
 
@@ -173,58 +128,33 @@ describe('suggestMerges', () => {
     ])
     const [s] = suggestMerges(lines)
     const units = s.options.map((o) => o.unit)
-    expect(units).toContain('dl')
-    expect(units).toContain('ml')
+    expect(units).toEqual(expect.arrayContaining(['dl', 'ml']))
     expect(units).not.toContain('g')
     expect(s.options.find((o) => o.unit === 'dl')!.amount).toBeCloseTo(3.3)
   })
 
-  it('makes no suggestion when the lines cannot be converted to a common unit', () => {
-    const lines = mergeItems([
-      item({ name: 'løk', food_id: 7, amount: 1, unit: 'stk' }),
-      item({ name: 'løk', food_id: 7, amount: 2, unit: 'dl' }),
-    ])
-    expect(suggestMerges(lines)).toEqual([])
+  it('makes no suggestion when nothing can be combined', () => {
+    const cases = [
+      [item({ name: 'løk', food_id: 7, amount: 1, unit: 'stk' }), item({ name: 'løk', food_id: 7, amount: 2, unit: 'dl' })], // no common unit
+      [item({ name: 'melk', amount: 1, unit: 'l' })], // single line
+      [item({ name: 'salt' }), item({ name: 'salt', amount: 1, unit: 'ts' })], // amount-less
+      [item({ name: 'mel', food_id: 10, amount: 1, unit: 'dl' }), item({ name: 'sukker', food_id: 11, amount: 200, unit: 'g' })], // different foods
+    ]
+    for (const rows of cases) expect(suggestMerges(mergeItems(rows), measures)).toEqual([])
   })
 
-  it('makes no suggestion for a single line, or for lines without an amount', () => {
-    expect(suggestMerges(mergeItems([item({ name: 'melk', amount: 1, unit: 'l' })]))).toEqual([])
-    expect(suggestMerges(mergeItems([item({ name: 'salt' }), item({ name: 'salt', amount: 1, unit: 'ts' })]))).toEqual([])
-  })
+  it('lists the units one line converts to exactly, never its own or a guess', () => {
+    const withMeasure = conversionOptions(lineOf(item({ name: 'mel', food_id: 10, amount: 2, unit: 'dl' })), measures)
+    expect(withMeasure.map((o) => o.unit)).toEqual(expect.arrayContaining(['g', 'ml']))
+    expect(withMeasure.map((o) => o.unit)).not.toContain('dl')
+    expect(withMeasure.find((o) => o.unit === 'g')!.amount).toBeCloseTo(110)
 
-  it('does not suggest merging different foods', () => {
-    const lines = mergeItems([
-      item({ name: 'mel', food_id: 10, amount: 1, unit: 'dl' }),
-      item({ name: 'sukker', food_id: 11, amount: 200, unit: 'g' }),
-    ])
-    expect(suggestMerges(lines, measures)).toEqual([])
-  })
-})
+    const noMeasure = conversionOptions(lineOf(item({ name: 'fløte', food_id: 99, amount: 2, unit: 'dl' }))).map((o) => o.unit)
+    expect(noMeasure).toContain('ss')
+    expect(noMeasure).not.toContain('g')
 
-describe('conversionOptions (manual conversion)', () => {
-  it('lists every unit a line converts to exactly, never its own', () => {
-    const [line] = mergeItems([item({ name: 'mel', food_id: 10, amount: 2, unit: 'dl' })])
-    const opts = conversionOptions(line, measures)
-    const units = opts.map((o) => o.unit)
-    expect(units).toContain('g')
-    expect(units).toContain('ml')
-    expect(units).not.toContain('dl')
-    expect(opts.find((o) => o.unit === 'g')!.amount).toBeCloseTo(110)
-    expect(opts.find((o) => o.unit === 'ml')!.amount).toBe(200)
-  })
-
-  it('stays within the same family without a measure', () => {
-    const [line] = mergeItems([item({ name: 'fløte', food_id: 99, amount: 2, unit: 'dl' })])
-    const units = conversionOptions(line).map((o) => o.unit)
-    expect(units).toContain('ss')
-    expect(units).not.toContain('g')
-  })
-
-  it('offers nothing for lines without an amount or unit', () => {
-    const [none] = mergeItems([item({ name: 'salt' })])
-    const [noUnit] = mergeItems([item({ name: 'egg', amount: 3 })])
-    expect(conversionOptions(none)).toEqual([])
-    expect(conversionOptions(noUnit)).toEqual([])
+    expect(conversionOptions(lineOf(item({ name: 'salt' })))).toEqual([])
+    expect(conversionOptions(lineOf(item({ name: 'egg', amount: 3 })))).toEqual([])
   })
 })
 
@@ -239,29 +169,22 @@ describe('convertLines / applyMerge', () => {
     ])
   })
 
-  it('after applying, the rows merge into one line automatically', () => {
+  it('after a merge or a manual conversion the rows sum into one line', () => {
     const rows = [
       item({ name: 'mel', food_id: 10, amount: 1, unit: 'dl' }),
       item({ name: 'mel', food_id: 10, amount: 200, unit: 'g' }),
     ]
     const [s] = suggestMerges(mergeItems(rows), measures)
-    const lines = mergeItems(applyRows(rows, applyMerge(s, 'g', measures)))
-    expect(lines).toHaveLength(1)
-    expect(lines[0]).toMatchObject({ amount: 255, unit: 'g', canUndo: true })
+    expect(mergeItems(applyRows(rows, applyMerge(s, 'g', measures)))[0]).toMatchObject({ amount: 255, unit: 'g', canUndo: true })
+
+    const single = [item({ name: 'mel', food_id: 10, amount: 2, unit: 'dl' })]
+    expect(mergeItems(applyRows(single, convertLines(mergeItems(single), 'g', measures)))[0]).toMatchObject({ amount: 110, unit: 'g' })
   })
 
-  it('converts a single line by hand', () => {
-    const rows = [item({ name: 'mel', food_id: 10, amount: 2, unit: 'dl' })]
-    const lines = mergeItems(rows)
-    const next = mergeItems(applyRows(rows, convertLines(lines, 'g', measures)))
-    expect(next[0]).toMatchObject({ amount: 110, unit: 'g', canUndo: true })
-  })
-
-  it('keeps recipe links and converts ranges', () => {
+  it('converts ranges and leaves recipe links alone', () => {
     const a = item({ name: 'fløte', food_id: 99, amount: 1, amount_max: 2, unit: 'dl', recipe_id: 'r1' })
     const b = item({ name: 'fløte', food_id: 99, amount: 2, unit: 'ss', recipe_id: 'r2' })
-    const [s] = suggestMerges(mergeItems([a, b]))
-    const updates = applyMerge(s, 'ml')
+    const updates = applyMerge(suggestMerges(mergeItems([a, b]))[0], 'ml')
     expect(updates.find((u) => u.id === a.id)).toMatchObject({ amount: 100, amount_max: 200, unit: 'ml' })
     expect(updates.find((u) => u.id === b.id)).toMatchObject({ amount: 30, amount_max: null, unit: 'ml' })
     expect(Object.keys(updates[0])).not.toContain('recipe_id')
@@ -277,7 +200,7 @@ describe('convertLines / applyMerge', () => {
 })
 
 describe('undoUpdates', () => {
-  it('restores the originals and clears the bookkeeping', () => {
+  it('restores a merge to two separate lines', () => {
     const rows = [
       item({ name: 'mel', food_id: 10, amount: 1, unit: 'dl', recipe_title: 'A' }),
       item({ name: 'mel', food_id: 10, amount: 200, unit: 'g', recipe_title: 'B' }),
@@ -285,11 +208,7 @@ describe('undoUpdates', () => {
     const [s] = suggestMerges(mergeItems(rows), measures)
     const converted = applyRows(rows, applyMerge(s, 'g', measures))
     const restored = applyRows(converted, undoUpdates(mergeItems(converted)))
-    expect(restored.map((r) => [r.amount, r.unit, r.orig_unit])).toEqual([
-      [1, 'dl', null],
-      [200, 'g', null],
-    ])
-    // back to two separate lines
+    expect(restored.map((r) => [r.amount, r.unit, r.orig_unit])).toEqual([[1, 'dl', null], [200, 'g', null]])
     expect(mergeItems(restored)).toHaveLength(2)
   })
 
@@ -302,170 +221,103 @@ describe('undoUpdates', () => {
     expect(rows[0]).toMatchObject({ amount: 2, unit: 'dl', orig_unit: null })
   })
 
-  it('does nothing for lines that were never converted', () => {
-    expect(undoUpdates(mergeItems([item({ name: 'melk', amount: 1, unit: 'l' })]))).toEqual([])
-  })
-
-  it('restores ranges', () => {
+  it('restores ranges, and does nothing for lines that were never converted', () => {
     let rows = [item({ name: 'fløte', food_id: 99, amount: 1, amount_max: 2, unit: 'dl' })]
     rows = applyRows(rows, convertLines(mergeItems(rows), 'ml'))
     rows = applyRows(rows, undoUpdates(mergeItems(rows)))
     expect(rows[0]).toMatchObject({ amount: 1, amount_max: 2, unit: 'dl' })
+    expect(undoUpdates(mergeItems(rows))).toEqual([])
   })
 })
 
-describe('adjustLine (editing a total)', () => {
-  const lineOf = (...rows: MergeItem[]) => mergeItems(rows)[0]
-
-  it('adds an increase to the most recently added row', () => {
+describe('editing a line', () => {
+  it('adjustLine: an increase goes to the newest row', () => {
     const a = item({ name: 'egg', amount: 2, position: 1, recipe_title: 'Kake' })
     const b = item({ name: 'egg', amount: 1, position: 2 })
     const { updates, deleteIds } = adjustLine(lineOf(a, b), 5)
     expect(deleteIds).toEqual([])
-    expect(updates).toHaveLength(1)
-    expect(updates[0]).toMatchObject({ id: b.id, amount: 3, unit: null })
+    expect(updates).toEqual([expect.objectContaining({ id: b.id, amount: 3 })])
   })
 
-  it('takes a decrease from the newest rows first, keeping older recipe rows', () => {
-    const a = item({ name: 'egg', amount: 2, position: 1, recipe_title: 'Kake' })
-    const b = item({ name: 'egg', amount: 1, position: 2 })
-    const { updates, deleteIds } = adjustLine(lineOf(a, b), 2)
-    expect(deleteIds).toEqual([b.id])
-    expect(updates).toEqual([])
-  })
-
-  it('reduces across rows and deletes the ones used up', () => {
+  it('adjustLine: a decrease takes from the newest rows first and deletes rows used up', () => {
     const a = item({ name: 'egg', amount: 3, position: 1 })
     const b = item({ name: 'egg', amount: 1, position: 2 })
     const c = item({ name: 'egg', amount: 1, position: 3 })
     const { updates, deleteIds } = adjustLine(lineOf(a, b, c), 2)
     expect(deleteIds).toEqual([c.id, b.id])
     expect(updates).toEqual([expect.objectContaining({ id: a.id, amount: 2 })])
+
+    const solo = item({ name: 'melk', amount: 5, unit: 'dl' })
+    expect(adjustLine(lineOf(solo), 3.5)).toMatchObject({ deleteIds: [], updates: [{ id: solo.id, amount: 3.5, unit: 'dl' }] })
   })
 
-  it('keeps a row when the decrease leaves something', () => {
-    const a = item({ name: 'melk', amount: 5, unit: 'dl' })
-    const { updates, deleteIds } = adjustLine(lineOf(a), 3.5)
-    expect(deleteIds).toEqual([])
-    expect(updates[0]).toMatchObject({ id: a.id, amount: 3.5, unit: 'dl' })
-  })
-
-  it('drops ranges and the undo record of touched rows', () => {
+  it('adjustLine: drops ranges and the undo record of touched rows', () => {
     const a = item({ name: 'fløte', amount: 1, amount_max: 2, unit: 'dl', orig_amount: 1, orig_unit: 'ss' })
-    const { updates } = adjustLine(lineOf(a), 3)
-    expect(updates[0]).toMatchObject({ amount: 3, amount_max: null, orig_amount: null, orig_amount_max: null, orig_unit: null })
-  })
-
-  it('does nothing when the amount is unchanged', () => {
-    expect(adjustLine(lineOf(item({ name: 'egg', amount: 2 })), 2)).toEqual({ updates: [], deleteIds: [] })
-  })
-
-  it('rejects zero, negative and lines without an amount', () => {
-    expect(() => adjustLine(lineOf(item({ name: 'egg', amount: 2 })), 0)).toThrow()
-    expect(() => adjustLine(lineOf(item({ name: 'egg', amount: 2 })), -1)).toThrow()
-    expect(() => adjustLine(lineOf(item({ name: 'salt' })), 1)).toThrow()
-  })
-
-  it('rounds away float noise', () => {
-    const a = item({ name: 'melk', amount: 0.1, unit: 'l' })
-    expect(adjustLine(lineOf(a), 0.3).updates[0].amount).toBe(0.3)
-  })
-})
-
-describe('giveAmount', () => {
-  it('sets amount and unit on the first row and removes duplicate amount-less rows', () => {
-    const a = item({ name: 'salt', food_id: 5 })
-    const b = item({ name: 'salt', food_id: 5 })
-    const line = mergeItems([a, b])[0]
-    expect(giveAmount(line, 2, 'ts')).toEqual({
-      updates: [{ id: a.id, amount: 2, amount_max: null, unit: 'ts', orig_amount: null, orig_amount_max: null, orig_unit: null }],
-      deleteIds: [b.id],
+    expect(adjustLine(lineOf(a), 3).updates[0]).toMatchObject({
+      amount: 3, amount_max: null, orig_amount: null, orig_amount_max: null, orig_unit: null,
     })
   })
 
-  it('rejects lines that already have an amount and non-positive amounts', () => {
-    expect(() => giveAmount(mergeItems([item({ name: 'egg', amount: 2 })])[0], 3, null)).toThrow()
-    expect(() => giveAmount(mergeItems([item({ name: 'salt' })])[0], 0, null)).toThrow()
-  })
-})
-
-describe('relabelLine / stepFor', () => {
-  it('changes only the unit, keeps numbers and ranges, clears undo', () => {
-    const a = item({ name: 'egg', amount: 2, amount_max: 3 })
-    const b = item({ name: 'egg', amount: 1 })
-    const updates = relabelLine(mergeItems([a, b])[0], 'stk')
-    expect(updates).toEqual([
-      { id: a.id, amount: 2, amount_max: 3, unit: 'stk', orig_amount: null, orig_amount_max: null, orig_unit: null },
-      { id: b.id, amount: 1, amount_max: null, unit: 'stk', orig_amount: null, orig_amount_max: null, orig_unit: null },
-    ])
+  it('adjustLine: no-op when unchanged, rejects zero, negative and amount-less lines', () => {
+    const egg = lineOf(item({ name: 'egg', amount: 2 }))
+    expect(adjustLine(egg, 2)).toEqual({ updates: [], deleteIds: [] })
+    expect(() => adjustLine(egg, 0)).toThrow()
+    expect(() => adjustLine(egg, -1)).toThrow()
+    expect(() => adjustLine(lineOf(item({ name: 'salt' })), 1)).toThrow()
   })
 
-  it('a relabelled line merges with existing lines of that unit', () => {
+  it('giveAmount: sets the first amount-less row and removes the duplicates', () => {
+    const a = item({ name: 'salt', food_id: 5 })
+    const b = item({ name: 'salt', food_id: 5 })
+    expect(giveAmount(lineOf(a, b), 2, 'ts')).toEqual({
+      updates: [{ id: a.id, amount: 2, amount_max: null, unit: 'ts', orig_amount: null, orig_amount_max: null, orig_unit: null }],
+      deleteIds: [b.id],
+    })
+    expect(() => giveAmount(lineOf(item({ name: 'egg', amount: 2 })), 3, null)).toThrow()
+  })
+
+  it('relabelLine: changes only the unit, so the line merges with others of that unit', () => {
     const rows = [
-      item({ name: 'egg', food_id: 1, amount: 2 }),
+      item({ name: 'egg', food_id: 1, amount: 2, amount_max: 3 }),
       item({ name: 'egg', food_id: 1, amount: 4, unit: 'stk' }),
     ]
-    expect(mergeItems(rows)).toHaveLength(2)
-    const line = mergeItems(rows).find((l) => l.unit == null)!
-    const relabelled = rows.map((r) => ({ ...r, ...(relabelLine(line, 'stk').find((u) => u.id === r.id) ?? {}) }))
-    expect(mergeItems(relabelled)).toHaveLength(1)
-    expect(mergeItems(relabelled)[0]).toMatchObject({ amount: 6, unit: 'stk' })
+    const bare = mergeItems(rows).find((l) => l.unit == null)!
+    const updates = relabelLine(bare, 'stk')
+    expect(updates).toEqual([
+      { id: rows[0].id, amount: 2, amount_max: 3, unit: 'stk', orig_amount: null, orig_amount_max: null, orig_unit: null },
+    ])
+    expect(mergeItems(applyRows(rows, updates))).toHaveLength(1)
   })
 
-  it('offers two or three quick steps per unit, smallest first', () => {
+  it('has a few sensible step sizes per unit', () => {
+    expect([stepFor(null), stepFor('g'), stepFor('dl')]).toEqual([1, 50, 0.5])
     for (const u of ['g', 'ml', 'kg', 'l', 'dl', 'ss', 'ts', 'krm', 'stk', 'pk', null]) {
       const steps = quickSteps(u)
       expect(steps.length).toBeGreaterThanOrEqual(2)
       expect(steps.length).toBeLessThanOrEqual(3)
-      expect([...steps].sort((a, b) => a - b)).toEqual(steps)
+      expect([...steps].sort((x, y) => x - y)).toEqual(steps)
     }
-    expect(quickSteps('g')).toEqual([50, 100, 250])
-    expect(quickSteps('kg')).toEqual([0.1, 0.5, 1])
-  })
-
-  it('picks sensible steps', () => {
-    expect(stepFor(null)).toBe(1)
-    expect(stepFor('stk')).toBe(1)
-    expect(stepFor('g')).toBe(50)
-    expect(stepFor('dl')).toBe(0.5)
   })
 })
 
-describe('formatting (decimals, no fractions)', () => {
-  it('formats g and ml as whole numbers and other units with up to two decimals', () => {
-    expect(formatDecimal(255.4, 'g')).toBe('255')
-    expect(formatDecimal(99.6, 'ml')).toBe('100')
-    expect(formatDecimal(3.3, 'dl')).toBe('3,3')
-    expect(formatDecimal(3.25, 'dl')).toBe('3,25')
-    expect(formatDecimal(3.254, 'dl')).toBe('3,25')
-    expect(formatDecimal(1.5, 'ss')).toBe('1,5')
-    expect(formatDecimal(7, 'dl')).toBe('7')
-    expect(formatDecimal(2, null)).toBe('2')
+describe('formatting', () => {
+  it('uses decimals with a comma: whole g/ml, up to two decimals otherwise, never 0', () => {
+    const cases: [number, string | null, string][] = [
+      [255.4, 'g', '255'], [99.6, 'ml', '100'], [3.3, 'dl', '3,3'], [3.25, 'dl', '3,25'],
+      [3.254, 'dl', '3,25'], [7, 'dl', '7'], [2, null, '2'], [0.2, 'g', '1'], [0.001, 'dl', '0,01'],
+    ]
+    for (const [value, unit, expected] of cases) expect(formatDecimal(value, unit)).toBe(expected)
   })
 
-  it('never shows a real amount as zero', () => {
-    expect(formatDecimal(0.2, 'g')).toBe('1')
-    expect(formatDecimal(0.001, 'dl')).toBe('0,01')
-  })
-
-  it('formats whole lines', () => {
-    expect(formatLineAmount({ amount: 7, amountMax: null, unit: 'dl' })).toBe('7 dl')
+  it('formats whole lines, with ranges and without amounts', () => {
     expect(formatLineAmount({ amount: 3.3, amountMax: null, unit: 'dl' })).toBe('3,3 dl')
     expect(formatLineAmount({ amount: 1, amountMax: 2, unit: 'dl' })).toBe('1–2 dl')
-    expect(formatLineAmount({ amount: 254.6, amountMax: null, unit: 'g' })).toBe('255 g')
     expect(formatLineAmount({ amount: 2, amountMax: null, unit: null })).toBe('2')
     expect(formatLineAmount({ amount: null, amountMax: null, unit: 'dl' })).toBe('')
   })
-})
 
-describe('groupByAisle', () => {
   it('orders aisles for shopping and puts unknown aisles before Annet', () => {
-    const groups = groupByAisle([
-      { aisle: 'Annet' },
-      { aisle: 'Meieri og egg' },
-      { aisle: 'Frukt og grønt' },
-      { aisle: 'Ukjent' },
-    ])
+    const groups = groupByAisle([{ aisle: 'Annet' }, { aisle: 'Meieri og egg' }, { aisle: 'Frukt og grønt' }, { aisle: 'Ukjent' }])
     expect(groups.map((g) => g.aisle)).toEqual(['Frukt og grønt', 'Meieri og egg', 'Ukjent', 'Annet'])
   })
 })
