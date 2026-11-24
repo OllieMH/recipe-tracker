@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { fetchRecipes, formatMinutes, recipeMatches, useFavorites, useRecipeList, visibleRecipes } from '@/lib/recipes'
 import { downloadBlob } from '@/lib/download'
@@ -7,7 +7,7 @@ import { thumbPathOf, useSignedUrls } from '@/lib/images'
 import RecipeImage from '@/components/RecipeImage'
 import { exportFilename, recipeToMarkdown, uniqueFilenames } from '@/lib/markdown'
 import { Button } from '@/components/ui/button'
-import { Clock, Lock, Search, Star, UtensilsCrossed, Users } from 'lucide-react'
+import { Clock, Lock, Plus, Search, Star, UtensilsCrossed, Users } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -20,6 +20,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function RecipeListPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const recipes = useRecipeList()
   const favorites = useFavorites(user?.id)
   const [tab, setTab] = useState<Tab>('alle')
@@ -76,16 +77,21 @@ export default function RecipeListPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-4 p-4">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          type="search"
-          placeholder="Søk i tittel, ingredienser og emneord"
-          aria-label="Søk"
-          className="h-11 pl-9"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            type="search"
+            placeholder="Søk i tittel, ingredienser og emneord"
+            aria-label="Søk"
+            className="h-11 pl-9"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <Button className="h-11" onClick={() => navigate('/ny')}>
+          <Plus aria-hidden /> Ny oppskrift
+        </Button>
       </div>
 
       <div role="tablist" className="flex gap-5 border-b border-foreground/20">
@@ -138,7 +144,7 @@ export default function RecipeListPage() {
       {recipes.data && shown.length === 0 && (
         <div className="py-10 text-center text-muted-foreground">
           {visible.length === 0 ? (
-            <>Ingen oppskrifter ennå. <Link to="/importer" className="font-semibold text-foreground underline">Importer den første</Link>.</>
+            <>Ingen oppskrifter ennå. <Link to="/ny" className="font-semibold text-foreground underline">Lag eller importer den første</Link>.</>
           ) : tab === 'favoritter' && !q && !tag ? (
             'Du har ingen favoritter ennå.'
           ) : (

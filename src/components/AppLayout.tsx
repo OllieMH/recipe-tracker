@@ -24,7 +24,7 @@ export default function AppLayout() {
             Oppskrifter
           </Link>
           <div className="order-3 flex w-full items-center justify-between gap-x-4 sm:order-2 sm:w-auto sm:justify-start sm:gap-x-5">
-            <NavLink to="/importer" className={navLink}>Importer</NavLink>
+            <NavLink to="/ny" className={navLink}>Ny oppskrift</NavLink>
             <NavLink to="/handleliste" className={navLink}>Handleliste</NavLink>
             <NavLink to="/omregning" className={navLink}>Omregning</NavLink>
             {isAdmin && <NavLink to="/admin" className={navLink}>Admin</NavLink>}

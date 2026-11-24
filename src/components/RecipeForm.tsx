@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { CANONICAL_UNITS } from '@/lib/recipe-schema'
-import { emptyIngredient, newKey, type DraftGroup, type DraftIngredient, type DraftRecipe } from '@/lib/recipe-draft'
-import type { Food } from '@/lib/foods'
+import { emptyIngredient, newKey, numStr, type DraftGroup, type DraftIngredient, type DraftRecipe } from '@/lib/recipe-draft'
+import { autoMatchFood, type Food } from '@/lib/foods'
+import { parseIngredientLines } from '@/lib/quick-add'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,8 +42,35 @@ export default function RecipeForm({ draft, onChange, foods }: Props) {
   const isCorrectedIngredient = (name: string) =>
     name.trim().length > 2 && correctedText.some((f) => f.includes(name.trim().toLowerCase()))
 
+  const [pasteGroup, setPasteGroup] = useState<string | null>(null)
+  const [pasteText, setPasteText] = useState('')
+
+  const swap = <T,>(items: T[], i: number, j: number): T[] => {
+    const next = [...items]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    return next
+  }
+
   const updateGroup = (gi: number, g: DraftGroup) =>
     set('groups', draft.groups.map((x, i) => (i === gi ? g : x)))
+
+  /** "2 dl melk" lines become ingredient rows (units checked, foods linked); blank placeholder rows make way. */
+  function addPastedLines(gi: number) {
+    const lines = parseIngredientLines(pasteText)
+    if (lines.length === 0) return
+    const g = draft.groups[gi]
+    const rows: DraftIngredient[] = lines.map((l) => ({
+      ...emptyIngredient(),
+      name: l.name,
+      amount: numStr(l.amount),
+      unit: l.unit && (CANONICAL_UNITS as readonly string[]).includes(l.unit) ? l.unit : '',
+      food_id: autoMatchFood(foods, l.name)?.id ?? null,
+    }))
+    const isBlank = (i: DraftIngredient) => !i.name.trim() && !i.amount.trim() && !i.note.trim()
+    updateGroup(gi, { ...g, ingredients: [...g.ingredients.filter((i) => !isBlank(i)), ...rows] })
+    setPasteText('')
+    setPasteGroup(null)
+  }
   const updateIngredient = (gi: number, ii: number, patch: Partial<DraftIngredient>) => {
     const g = draft.groups[gi]
     updateGroup(gi, { ...g, ingredients: g.ingredients.map((x, i) => (i === ii ? { ...x, ...patch } : x)) })
@@ -123,6 +152,14 @@ export default function RecipeForm({ draft, onChange, foods }: Props) {
                 value={g.name}
                 onChange={(e) => updateGroup(gi, { ...g, name: e.target.value })}
               />
+              <Button type="button" variant="ghost" size="sm" disabled={gi === 0}
+                aria-label="Flytt gruppen opp" onClick={() => set('groups', swap(draft.groups, gi, gi - 1))}>
+                Opp
+              </Button>
+              <Button type="button" variant="ghost" size="sm" disabled={gi === draft.groups.length - 1}
+                aria-label="Flytt gruppen ned" onClick={() => set('groups', swap(draft.groups, gi, gi + 1))}>
+                Ned
+              </Button>
               <Button type="button" variant="ghost" size="sm"
                 onClick={() => set('groups', draft.groups.filter((_, i) => i !== gi))}>
                 Fjern gruppe
@@ -165,7 +202,17 @@ export default function RecipeForm({ draft, onChange, foods }: Props) {
                       Omregnet fra {String(ing.original_amount).replace('.', ',')} {ing.original_unit}
                     </span>
                   )}
-                  <Button type="button" variant="ghost" size="sm" className="ml-auto h-7"
+                  <Button type="button" variant="ghost" size="sm" className="ml-auto h-7" disabled={ii === 0}
+                    aria-label="Flytt ingrediensen opp"
+                    onClick={() => updateGroup(gi, { ...g, ingredients: swap(g.ingredients, ii, ii - 1) })}>
+                    Opp
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-7" disabled={ii === g.ingredients.length - 1}
+                    aria-label="Flytt ingrediensen ned"
+                    onClick={() => updateGroup(gi, { ...g, ingredients: swap(g.ingredients, ii, ii + 1) })}>
+                    Ned
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-7"
                     onClick={() => updateGroup(gi, { ...g, ingredients: g.ingredients.filter((_, i) => i !== ii) })}>
                     Fjern
                   </Button>
@@ -173,10 +220,37 @@ export default function RecipeForm({ draft, onChange, foods }: Props) {
               </div>
             ))}
 
-            <Button type="button" variant="outline" size="sm"
-              onClick={() => updateGroup(gi, { ...g, ingredients: [...g.ingredients, emptyIngredient()] })}>
-              + Ingrediens
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm"
+                onClick={() => updateGroup(gi, { ...g, ingredients: [...g.ingredients, emptyIngredient()] })}>
+                + Ingrediens
+              </Button>
+              <Button type="button" variant="outline" size="sm" aria-expanded={pasteGroup === g.key}
+                onClick={() => { setPasteGroup(pasteGroup === g.key ? null : g.key); setPasteText('') }}>
+                Lim inn flere …
+              </Button>
+            </div>
+            {pasteGroup === g.key && (
+              <div className="space-y-2 rounded-md border bg-card p-2">
+                <Textarea
+                  aria-label="Ingredienser, én per linje"
+                  rows={5}
+                  autoFocus
+                  placeholder={'2 dl melk\n500 g hvetemel\n3 egg'}
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                />
+                <div className="flex items-center gap-2">
+                  <Button type="button" size="sm" disabled={parseIngredientLines(pasteText).length === 0}
+                    onClick={() => addPastedLines(gi)}>
+                    Legg til {parseIngredientLines(pasteText).length || ''} ingredienser
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => { setPasteGroup(null); setPasteText('') }}>
+                    Avbryt
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
         <Button type="button" variant="outline" size="sm"

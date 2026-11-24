@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { parseQuickAdd } from './quick-add'
+import { parseIngredientLines, parseQuickAdd } from './quick-add'
+
+describe('parseIngredientLines', () => {
+  it('makes one item per line, skipping blanks, bullets, checkboxes and list numbers', () => {
+    const lines = ['2 dl melk', '', '  - 500 g mel', '* [ ] 3 egg', '4. 1,5 ts salt', '• sukker'].join('\n')
+    expect(parseIngredientLines(lines)).toEqual([
+      { name: 'melk', amount: 2, unit: 'dl' },
+      { name: 'mel', amount: 500, unit: 'g' },
+      { name: 'egg', amount: 3, unit: null },
+      { name: 'salt', amount: 1.5, unit: 'ts' },
+      { name: 'sukker', amount: null, unit: null },
+    ])
+    expect(parseIngredientLines('   \n\n')).toEqual([])
+  })
+})
 
 describe('parseQuickAdd', () => {
   it('returns null for empty input and takes a plain name as is', () => {

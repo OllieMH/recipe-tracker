@@ -54,7 +54,7 @@ export interface DraftRecipe {
 let counter = 0
 export const newKey = () => `k${++counter}`
 
-const numStr = (n: number | null | undefined) => (n == null ? '' : String(n).replace('.', ','))
+export const numStr = (n: number | null | undefined) => (n == null ? '' : String(n).replace('.', ','))
 
 /** Parses "2,5", "1/2", "½" style input. Returns null for empty / invalid. */
 export function parseNumber(s: string): number | null {
@@ -73,6 +73,29 @@ export function emptyIngredient(): DraftIngredient {
     key: newKey(), original_text: '', amount: '', amount_max: '', unit: '',
     original_amount: null, original_unit: null, name: '', note: '',
     scalable: true, food_id: null,
+  }
+}
+
+/** A blank recipe for writing one from scratch: one empty ingredient group, one empty step. */
+export function emptyDraft(visibility: 'public' | 'private' = 'public'): DraftRecipe {
+  return {
+    visibility,
+    title: '',
+    description: '',
+    servings: '',
+    servings_unit: '',
+    prep_minutes: '',
+    total_minutes: '',
+    source_url: '',
+    original_language: '',
+    was_translated: false,
+    tags: '',
+    tips: '',
+    groups: [{ key: newKey(), name: '', ingredients: [emptyIngredient()] }],
+    steps: [{ key: newKey(), group_name: '', text: '' }],
+    import_raw_text: null,
+    corrections: [],
+    warnings: [],
   }
 }
 

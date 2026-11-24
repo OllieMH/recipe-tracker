@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth'
 import LoginPage from '@/routes/LoginPage'
 import SetPasswordPage from '@/routes/SetPasswordPage'
 import RecipeListPage from '@/routes/RecipeListPage'
-import ImportPage from '@/routes/ImportPage'
+import NewRecipePage from '@/routes/NewRecipePage'
 import RecipeDetailPage from '@/routes/RecipeDetailPage'
 import RecipeEditPage from '@/routes/RecipeEditPage'
 import ConverterPage from '@/routes/ConverterPage'
@@ -33,7 +33,9 @@ export default function App() {
       <Route element={<AuthGuard />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<RecipeListPage />} />
-          <Route path="/importer" element={<ImportPage />} />
+          <Route path="/ny" element={<NewRecipePage />} />
+          {/* the old address: bookmarks and the installed app keep working */}
+          <Route path="/importer" element={<Navigate to="/ny" replace />} />
           <Route path="/oppskrift/:id" element={<RecipeDetailPage />} />
           <Route path="/oppskrift/:id/rediger" element={<RecipeEditPage />} />
           <Route path="/omregning" element={<ConverterPage />} />

@@ -22,6 +22,18 @@ export interface QuickAdd {
   unit: string | null
 }
 
+/**
+ * Several lines at once ("2 dl melk" / "- 500 g mel" / "1. 3 egg"): one item per
+ * non-empty line, with bullets, checkboxes and list numbers stripped first.
+ */
+export function parseIngredientLines(input: string): QuickAdd[] {
+  return input
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:[-*•·]\s*(?:\[[ xX]\]\s*)?|\d+[.)]\s+)/, ''))
+    .map(parseQuickAdd)
+    .filter((item): item is QuickAdd => item !== null)
+}
+
 export function parseQuickAdd(input: string): QuickAdd | null {
   const text = input.trim().replace(/\s+/g, ' ')
   if (!text) return null
