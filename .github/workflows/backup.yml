@@ -1,0 +1,45 @@
+name: Database backup
+
+# Daily encrypted pg_dump of the Supabase database. The connection also counts
+# as activity, so the free-tier project is not paused for inactivity.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          # Postgres 17 client to match the server. Public + auth schemas
+          # (app data and users). Storage objects (images) are not included.
+          docker run --rm -e SUPABASE_DB_URL postgres:17 \
+            sh -c 'pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges --schema=public --schema=auth' \
+            > backup.dump
+          test -s backup.dump
+
+      - name: Encrypt dump
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE \
+            -in backup.dump -out "kokebok-$(date -u +%Y-%m-%d).dump.enc"
+          rm backup.dump
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kokebok-db-backup
+          path: kokebok-*.dump.enc
+          retention-days: 30
+          if-no-files-found: error
