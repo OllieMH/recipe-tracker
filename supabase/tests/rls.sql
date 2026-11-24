@@ -180,6 +180,209 @@ end $$;
 -- Recipes are meant for signed-in users only ("Logg inn for å se oppskriftene"),
 -- so anon must see nothing. If this fails, public recipes are readable by anyone.
 -- ============================================================================
+-- ============================================================================
+-- shopping lists (needs the 20261124000002_shopping_lists migration)
+-- alice owns a list; bob is first a non-member, then a member; carol is an
+-- unrelated admin (admins get no special access to other people's lists).
+-- ============================================================================
+select set_config('request.jwt.claims',
+  '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated"}', true);
+
+do $$
+declare lid uuid; n int; ok boolean;
+begin
+  lid := public.create_list('Ukeshandel');
+  perform set_config('test.list_id', lid::text, true);
+
+  select count(*) into n from public.shopping_list_members where list_id = lid;
+  assert n = 1, 'owner must be the list''s only member after create_list';
+
+  insert into public.shopping_list_items (list_id, name, amount, unit, aisle)
+  values (lid, 'melk', 1, 'l', 'Meieri og egg');
+
+  -- lists and members cannot be written directly
+  begin
+    insert into public.shopping_lists (name, owner_id) values ('direct', auth.uid());
+    raise exception 'alice inserted a list directly';
+  exception when insufficient_privilege then null; end;
+  begin
+    insert into public.shopping_list_members (list_id, user_id)
+    values (lid, 'bbbbbbbb-0000-0000-0000-000000000002');
+    raise exception 'alice inserted a member directly';
+  exception when insufficient_privilege then null; end;
+
+  -- cannot forge who added an item
+  begin
+    insert into public.shopping_list_items (list_id, name, added_by)
+    values (lid, 'forged', 'bbbbbbbb-0000-0000-0000-000000000002');
+    raise exception 'alice forged added_by';
+  exception when insufficient_privilege then null; end;
+
+  -- unknown email
+  ok := false;
+  begin
+    perform public.share_list(lid, 'nobody@test.invalid');
+  exception when no_data_found then ok := true; end;
+  assert ok, 'share_list must reject an unknown email';
+
+  -- the owner cannot be removed or leave
+  ok := false;
+  begin
+    perform public.remove_list_member(lid, 'aaaaaaaa-0000-0000-0000-000000000001');
+  exception when raise_exception then ok := true; end;
+  assert ok, 'the owner must not be removable';
+  delete from public.shopping_list_members
+    where list_id = lid and user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
+  get diagnostics n = row_count;
+  assert n = 0, 'the owner must not be able to leave the list';
+
+  -- reference data is readable but not writable
+  select count(*) into n from public.aisle_map;
+  assert n > 0, 'signed-in users should read aisle_map';
+  begin
+    insert into public.aisle_map (category, aisle) values ('x', 'y');
+    raise exception 'alice wrote aisle_map';
+  exception when insufficient_privilege then null; end;
+end $$;
+
+-- bob, not a member yet
+select set_config('request.jwt.claims',
+  '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}', true);
+
+do $$
+declare lid uuid := current_setting('test.list_id')::uuid; n int;
+begin
+  select count(*) into n from public.shopping_lists where id = lid;
+  assert n = 0, 'non-member must not see the list';
+  select count(*) into n from public.shopping_list_items where list_id = lid;
+  assert n = 0, 'non-member must not see items';
+  select count(*) into n from public.shopping_list_members where list_id = lid;
+  assert n = 0, 'non-member must not see members';
+
+  begin
+    insert into public.shopping_list_items (list_id, name) values (lid, 'sneaky');
+    raise exception 'non-member added an item';
+  exception when insufficient_privilege then null; end;
+
+  begin
+    perform public.share_list(lid, 'bob@test.invalid');
+    raise exception 'non-member shared the list with himself';
+  exception when insufficient_privilege then null; end;
+
+  update public.shopping_lists set name = 'hacked' where id = lid;
+  get diagnostics n = row_count;
+  assert n = 0, 'non-member must not rename the list';
+  delete from public.shopping_lists where id = lid;
+  get diagnostics n = row_count;
+  assert n = 0, 'non-member must not delete the list';
+
+  select count(*) into n from public.display_names(array['aaaaaaaa-0000-0000-0000-000000000001']::uuid[]);
+  assert n = 0, 'display_names must not reveal people you share no list with';
+end $$;
+
+-- alice shares with bob
+select set_config('request.jwt.claims',
+  '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated"}', true);
+do $$
+declare lid uuid := current_setting('test.list_id')::uuid; n int;
+begin
+  perform public.share_list(lid, 'bob@test.invalid');
+  perform public.share_list(lid, 'bob@test.invalid');  -- idempotent
+  select count(*) into n from public.shopping_list_members where list_id = lid;
+  assert n = 2, 'list should have alice and bob as members';
+end $$;
+
+-- bob, now a member
+select set_config('request.jwt.claims',
+  '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}', true);
+
+do $$
+declare lid uuid := current_setting('test.list_id')::uuid; n int; item bigint; who uuid; names int;
+begin
+  select count(*) into n from public.shopping_lists where id = lid;
+  assert n = 1, 'member must see the list';
+  select id into item from public.shopping_list_items where list_id = lid and name = 'melk';
+  assert item is not null, 'member must see items';
+
+  insert into public.shopping_list_items (list_id, name, aisle) values (lid, 'brød', 'Brød og bakevarer');
+
+  update public.shopping_list_items set checked = true where id = item;
+  select checked_by into who from public.shopping_list_items where id = item;
+  assert who = 'bbbbbbbb-0000-0000-0000-000000000002', 'ticking must record who ticked';
+  update public.shopping_list_items set checked = false where id = item;
+  select checked_by into who from public.shopping_list_items where id = item;
+  assert who is null, 'unticking must clear checked_by';
+
+  -- items cannot be moved to another list or re-attributed
+  begin
+    update public.shopping_list_items set list_id = gen_random_uuid() where id = item;
+    raise exception 'member changed list_id';
+  exception when insufficient_privilege then null; end;
+  begin
+    update public.shopping_list_items set added_by = 'bbbbbbbb-0000-0000-0000-000000000002' where id = item;
+    raise exception 'member changed added_by';
+  exception when insufficient_privilege then null; end;
+
+  -- members cannot manage the list itself
+  update public.shopping_lists set name = 'hacked' where id = lid;
+  get diagnostics n = row_count;
+  assert n = 0, 'member must not rename the list';
+  begin
+    perform public.share_list(lid, 'carol@test.invalid');
+    raise exception 'member shared the list';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.remove_list_member(lid, 'aaaaaaaa-0000-0000-0000-000000000001');
+    raise exception 'member removed the owner';
+  exception when insufficient_privilege then null; end;
+
+  -- display names: alice yes (shared list), carol no
+  select count(*) into names from public.display_names(array['aaaaaaaa-0000-0000-0000-000000000001']::uuid[]);
+  assert names = 1, 'display_names should show a list co-member';
+  select count(*) into names from public.display_names(array['cccccccc-0000-0000-0000-000000000003']::uuid[]);
+  assert names = 0, 'display_names must not show someone outside your lists';
+end $$;
+
+-- carol (admin) is not a member: no special access
+select set_config('request.jwt.claims',
+  '{"sub":"cccccccc-0000-0000-0000-000000000003","role":"authenticated"}', true);
+do $$
+declare lid uuid := current_setting('test.list_id')::uuid; n int;
+begin
+  select count(*) into n from public.shopping_lists where id = lid;
+  assert n = 0, 'admin must not see other people''s lists';
+  select count(*) into n from public.shopping_list_items where list_id = lid;
+  assert n = 0, 'admin must not see other people''s list items';
+end $$;
+
+-- bob leaves; then alice deletes the list and its items go too
+select set_config('request.jwt.claims',
+  '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}', true);
+do $$
+declare lid uuid := current_setting('test.list_id')::uuid; n int;
+begin
+  delete from public.shopping_list_members
+    where list_id = lid and user_id = 'bbbbbbbb-0000-0000-0000-000000000002';
+  get diagnostics n = row_count;
+  assert n = 1, 'a member must be able to leave';
+  select count(*) into n from public.shopping_list_items where list_id = lid;
+  assert n = 0, 'after leaving, bob must not see items';
+end $$;
+
+select set_config('request.jwt.claims',
+  '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated"}', true);
+do $$
+declare lid uuid := current_setting('test.list_id')::uuid; n int;
+begin
+  delete from public.shopping_lists where id = lid;
+  get diagnostics n = row_count;
+  assert n = 1, 'the owner must be able to delete the list';
+  reset role;
+  select count(*) into n from public.shopping_list_items where list_id = lid;
+  assert n = 0, 'deleting a list must delete its items';
+  set local role authenticated;
+end $$;
+
 reset role;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 set local role anon;
@@ -201,6 +404,18 @@ begin
   begin
     select count(*) into n from public.steps;
     assert n = 0, format('anon can read %s step(s) without logging in', n);
+  exception when insufficient_privilege then null; end;
+  begin
+    select count(*) into n from public.shopping_lists;
+    assert n = 0, format('anon can read %s shopping list(s)', n);
+  exception when insufficient_privilege then null; end;
+  begin
+    select count(*) into n from public.shopping_list_items;
+    assert n = 0, format('anon can read %s shopping item(s)', n);
+  exception when insufficient_privilege then null; end;
+  begin
+    select count(*) into n from public.aisle_map;
+    assert n = 0, format('anon can read %s aisle_map row(s)', n);
   exception when insufficient_privilege then null; end;
 end $$;
 

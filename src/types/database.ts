@@ -39,6 +39,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      aisle_map: {
+        Row: {
+          aisle: string
+          category: string
+        }
+        Insert: {
+          aisle: string
+          category: string
+        }
+        Update: {
+          aisle?: string
+          category?: string
+        }
+        Relationships: []
+      }
       favorites: {
         Row: {
           created_at: string
@@ -366,6 +381,158 @@ export type Database = {
           },
         ]
       }
+      shopping_list_items: {
+        Row: {
+          added_by: string | null
+          aisle: string
+          amount: number | null
+          amount_max: number | null
+          checked: boolean
+          checked_by: string | null
+          created_at: string
+          food_id: number | null
+          id: number
+          list_id: string
+          name: string
+          position: number
+          recipe_id: string | null
+          recipe_title: string | null
+          unit: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          aisle?: string
+          amount?: number | null
+          amount_max?: number | null
+          checked?: boolean
+          checked_by?: string | null
+          created_at?: string
+          food_id?: number | null
+          id?: never
+          list_id: string
+          name: string
+          position?: number
+          recipe_id?: string | null
+          recipe_title?: string | null
+          unit?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          aisle?: string
+          amount?: number | null
+          amount_max?: number | null
+          checked?: boolean
+          checked_by?: string | null
+          created_at?: string
+          food_id?: number | null
+          id?: never
+          list_id?: string
+          name?: string
+          position?: number
+          recipe_id?: string | null
+          recipe_title?: string | null
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_list_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_list_items_checked_by_fkey"
+            columns: ["checked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_list_items_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_list_items_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "shopping_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_list_items_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopping_list_members: {
+        Row: {
+          created_at: string
+          list_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          list_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          list_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_list_members_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "shopping_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_list_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopping_lists: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_lists_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       steps: {
         Row: {
           group_name: string | null
@@ -417,10 +584,28 @@ export type Database = {
       }
       can_edit_recipe: { Args: { rid: string }; Returns: boolean }
       copy_recipe: { Args: { source_id: string }; Returns: string }
+      create_list: { Args: { p_name: string }; Returns: string }
+      display_names: {
+        Args: { ids: string[] }
+        Returns: {
+          display_name: string
+          id: string
+        }[]
+      }
       image_recipe_id: { Args: { path: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
+      is_list_member: { Args: { lid: string }; Returns: boolean }
+      is_list_owner: { Args: { lid: string }; Returns: boolean }
       owns_recipe: { Args: { recipe_id: string }; Returns: boolean }
+      remove_list_member: {
+        Args: { p_list_id: string; p_user_id: string }
+        Returns: undefined
+      }
       save_recipe: { Args: { payload: Json }; Returns: string }
+      share_list: {
+        Args: { p_email: string; p_list_id: string }
+        Returns: string
+      }
       update_recipe: {
         Args: { payload: Json; recipe_id: string }
         Returns: undefined
