@@ -259,7 +259,7 @@ const LLM_ERRORS: Record<string, string> = {
   not_found: 'Fant ikke oppskriften.',
   text_too_short: 'Teksten er for kort til å være en oppskrift.',
   text_too_long: 'Teksten er for lang. Lim inn bare selve oppskriften.',
-  too_many_images: 'Du kan bruke opptil 4 bilder om gangen.',
+  too_many_images: 'Du kan bruke opptil 10 bilder om gangen.',
   images_too_large: 'Bildene er for store. Prøv færre bilder eller lavere oppløsning.',
   rate_limited: 'Du har nådd dagens grense for KI-bruk. Prøv igjen i morgen.',
   llm_busy: 'KI-tjenesten er travel akkurat nå. Prøv igjen om litt.',

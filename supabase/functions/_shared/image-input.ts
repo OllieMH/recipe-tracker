@@ -1,9 +1,9 @@
 // Validation of photos sent to import-recipe. Pure (no Deno APIs) so the tests can import it.
 // Limits keep the whole request well under Gemini's 20 MB and the (undocumented) body limit of Edge Functions.
 
-export const MAX_IMAGES = 4
+export const MAX_IMAGES = 10
 export const MAX_IMAGE_B64 = 3_000_000 // per image, base64 characters (about 2.2 MB of picture)
-export const MAX_TOTAL_B64 = 8_000_000 // all images together
+export const MAX_TOTAL_B64 = 10_000_000 // all images together
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
 
 export interface ImageInput {

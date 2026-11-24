@@ -14,6 +14,6 @@ describe('checkImages', () => {
 
   it('refuses a single or total payload that is too big', () => {
     expect(checkImages([img('A'.repeat(MAX_IMAGE_B64 + 1))])).toBe('images_too_large')
-    expect(checkImages([1, 2, 3].map(() => img('A'.repeat(2_900_000))))).toBe('images_too_large')
+    expect(checkImages([1, 2, 3, 4].map(() => img('A'.repeat(2_900_000))))).toBe('images_too_large')
   })
 })

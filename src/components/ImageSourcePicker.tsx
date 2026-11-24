@@ -4,7 +4,7 @@ import { useImagePaste } from '@/lib/clipboard-image'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
-export const MAX_SOURCE_IMAGES = 4
+export const MAX_SOURCE_IMAGES = 10
 
 interface Props {
   files: File[]

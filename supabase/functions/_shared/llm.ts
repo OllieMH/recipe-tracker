@@ -34,6 +34,10 @@ const FALLBACK_MODELS = () =>
   (Deno.env.get('GEMINI_FALLBACK_MODELS') ?? '').split(',').map((m) => m.trim()).filter(Boolean)
 const RETRYABLE = new Set([429, 500, 503])
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+// Supabase kills a function after 150 s of wall-clock time. Stay under that: each Gemini call
+// may take at most CALL_TIMEOUT_MS, and nothing new starts once the whole request has used TOTAL_BUDGET_MS.
+const CALL_TIMEOUT_MS = 50_000
+const TOTAL_BUDGET_MS = 125_000
 
 async function callProvider(
   model: string,
@@ -42,6 +46,7 @@ async function callProvider(
   jsonSchema: unknown,
   primary: boolean,
   images: LlmImage[],
+  deadline: number,
 ): Promise<RawResult> {
   const apiKey = Deno.env.get('GEMINI_API_KEY')
   if (!apiKey) throw new LlmError('GEMINI_API_KEY is not set')
@@ -58,10 +63,14 @@ async function callProvider(
 
   let res!: Response
   for (let i = 0; i < 3; i++) {
-    res = await fetch(
+    const remaining = deadline - Date.now()
+    if (remaining < 8_000) throw new LlmError('LLM time budget used up', true, false)
+    try {
+      res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
         method: 'POST',
+        signal: AbortSignal.timeout(Math.min(CALL_TIMEOUT_MS, remaining)),
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -76,7 +85,12 @@ async function callProvider(
           generationConfig,
         }),
       },
-    )
+      )
+    } catch (err) {
+      // A call that hangs is treated like an overloaded model: try the next one in the chain.
+      console.warn(`Gemini ${model} did not answer in time`, err)
+      throw new LlmError(`LLM request timed out (${model})`, true)
+    }
     if (res.ok || !RETRYABLE.has(res.status)) break
     console.warn(`Gemini ${model} returned ${res.status}, attempt ${i + 1}/3`)
     if (i < 2) await sleep(1500 * (i + 1))
@@ -115,6 +129,7 @@ export async function generateStructured<S extends z.ZodType>(
   let tokensOut = 0
   let lastError = ''
   let model = MODEL()
+  const deadline = Date.now() + TOTAL_BUDGET_MS
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const content = attempt === 0
@@ -124,7 +139,7 @@ export async function generateStructured<S extends z.ZodType>(
     const chain = [model, ...FALLBACK_MODELS().filter((m) => m !== model)]
     for (let i = 0; i < chain.length && !raw; i++) {
       try {
-        raw = await callProvider(chain[i], systemPrompt, content, jsonSchema, chain[i] === MODEL(), images)
+        raw = await callProvider(chain[i], systemPrompt, content, jsonSchema, chain[i] === MODEL(), images, deadline)
         model = chain[i]
       } catch (err) {
         const last = i === chain.length - 1
