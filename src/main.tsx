@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App'
 import { AuthProvider } from '@/components/AuthProvider'
+import UpdatePrompt from '@/components/UpdatePrompt'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <App />
+          <UpdatePrompt />
         </AuthProvider>
       </QueryClientProvider>
     </BrowserRouter>
