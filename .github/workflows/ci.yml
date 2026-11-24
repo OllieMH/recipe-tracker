@@ -16,10 +16,15 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # Placeholders for tests and build: src/lib/supabase.ts throws without
+      # them, but nothing here talks to Supabase.
+      VITE_SUPABASE_URL: https://example.supabase.co
+      VITE_SUPABASE_ANON_KEY: ci-placeholder
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -31,7 +36,3 @@ jobs:
 
       - name: Typecheck and build
         run: npm run build
-        env:
-          # Placeholders: the build never talks to Supabase.
-          VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder
