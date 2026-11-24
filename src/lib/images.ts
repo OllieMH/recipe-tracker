@@ -66,6 +66,50 @@ async function prepare(file: File) {
   }
 }
 
+const AI_SIDE = 2000 // higher than for pictures: small print has to stay legible
+const AI_TARGET_BYTES = 600 * 1024
+
+/**
+ * A photo or screenshot made ready for recipe reading: upright, at most 2000 px, JPEG of
+ * about 600 KB or less (quality steps down until it fits), as base64 without the data: prefix.
+ */
+export async function prepareForAi(file: File): Promise<{ mime_type: 'image/jpeg'; data: string }> {
+  if (!file.type.startsWith('image/') || file.size > MAX_FILE_BYTES) throw new Error(IMAGE_ERROR)
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  } catch {
+    throw new Error(IMAGE_ERROR)
+  }
+  try {
+    const { width, height } = scaledSize(bitmap.width, bitmap.height, AI_SIDE)
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error(IMAGE_ERROR)
+    ctx.fillStyle = '#fff' // transparent PNG screenshots must not turn black as JPEG
+    ctx.fillRect(0, 0, width, height)
+    ctx.drawImage(bitmap, 0, 0, width, height)
+
+    let blob: Blob | null = null
+    for (const quality of [0.85, 0.75, 0.65, 0.55]) {
+      blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', quality))
+      if (blob && blob.size <= AI_TARGET_BYTES) break
+    }
+    if (!blob) throw new Error(IMAGE_ERROR)
+    const dataUrl = await new Promise<string>((res, rej) => {
+      const r = new FileReader()
+      r.onload = () => res(r.result as string)
+      r.onerror = () => rej(r.error)
+      r.readAsDataURL(blob)
+    })
+    return { mime_type: 'image/jpeg', data: dataUrl.slice(dataUrl.indexOf(',') + 1) }
+  } finally {
+    bitmap.close()
+  }
+}
+
 async function removeFiles(recipeId: string, path: string | null | undefined) {
   if (!ownsPath(recipeId, path)) return
   await supabase.storage.from(BUCKET).remove([path, thumbPathOf(path)])

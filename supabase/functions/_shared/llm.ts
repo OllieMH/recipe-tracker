@@ -15,6 +15,12 @@ interface RawResult {
   tokensOut: number
 }
 
+/** A picture sent along with the prompt (base64, no data: prefix). */
+export interface LlmImage {
+  mime_type: string
+  data: string
+}
+
 export class LlmError extends Error {
   /** busy: temporary overload (UI says "try again"). skip: try the next model in the chain. */
   constructor(message: string, readonly busy = false, readonly skip = busy) {
@@ -35,6 +41,7 @@ async function callProvider(
   userContent: string,
   jsonSchema: unknown,
   primary: boolean,
+  images: LlmImage[],
 ): Promise<RawResult> {
   const apiKey = Deno.env.get('GEMINI_API_KEY')
   if (!apiKey) throw new LlmError('GEMINI_API_KEY is not set')
@@ -58,7 +65,14 @@ async function callProvider(
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userContent }] }],
+          // Text first, then the images (Gemini's recommendation for single-prompt image input).
+          contents: [{
+            role: 'user',
+            parts: [
+              { text: userContent },
+              ...images.map((i) => ({ inlineData: { mimeType: i.mime_type, data: i.data } })),
+            ],
+          }],
           generationConfig,
         }),
       },
@@ -94,6 +108,7 @@ export async function generateStructured<S extends z.ZodType>(
   systemPrompt: string,
   userContent: string,
   schema: S,
+  images: LlmImage[] = [],
 ): Promise<LlmResult<z.infer<S>>> {
   const jsonSchema = z.toJSONSchema(schema)
   let tokensIn = 0
@@ -109,7 +124,7 @@ export async function generateStructured<S extends z.ZodType>(
     const chain = [model, ...FALLBACK_MODELS().filter((m) => m !== model)]
     for (let i = 0; i < chain.length && !raw; i++) {
       try {
-        raw = await callProvider(chain[i], systemPrompt, content, jsonSchema, chain[i] === MODEL())
+        raw = await callProvider(chain[i], systemPrompt, content, jsonSchema, chain[i] === MODEL(), images)
         model = chain[i]
       } catch (err) {
         const last = i === chain.length - 1

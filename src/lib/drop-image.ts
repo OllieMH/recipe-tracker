@@ -12,9 +12,14 @@ const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer.types).includes('Fi
  * to highlight it. Only reacts to files being dragged, not to text or links.
  */
 export function useImageDrop(onImage: (file: File) => void) {
+  return useImagesDrop((files) => onImage(files[0]))
+}
+
+/** Same, but hands over every image that was dropped. */
+export function useImagesDrop(onImages: (files: File[]) => void) {
   const [dragging, setDragging] = useState(false)
-  const handler = useRef(onImage)
-  handler.current = onImage
+  const handler = useRef(onImages)
+  handler.current = onImages
 
   const props = {
     onDragOver(e: DragEvent) {
@@ -31,8 +36,8 @@ export function useImageDrop(onImage: (file: File) => void) {
       if (!hasFiles(e)) return
       e.preventDefault()
       setDragging(false)
-      const file = firstImage(e.dataTransfer.files)
-      if (file) handler.current(file)
+      const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'))
+      if (files.length > 0) handler.current(files)
     },
   }
 

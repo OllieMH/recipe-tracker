@@ -1,8 +1,10 @@
 import { useState, type ClipboardEvent } from 'react'
 import { htmlToText, plainToText } from '@/lib/html-to-text'
 import { useFoods } from '@/lib/foods'
-import { draftFromLlm, emptyDraft, importRecipe, type DraftRecipe } from '@/lib/recipe-draft'
+import { draftFromLlm, emptyDraft, importRecipe, importRecipeFromImages, type DraftRecipe } from '@/lib/recipe-draft'
+import { prepareForAi } from '@/lib/images'
 import RecipeReview from '@/components/RecipeReview'
+import ImageSourcePicker from '@/components/ImageSourcePicker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,9 +12,10 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
-type Mode = 'tekst' | 'manuell'
+type Mode = 'tekst' | 'bilde' | 'manuell'
 const MODES: { id: Mode; label: string }[] = [
   { id: 'tekst', label: 'Lim inn tekst' },
+  { id: 'bilde', label: 'Fra bilde' },
   { id: 'manuell', label: 'Skriv selv' },
 ]
 
@@ -33,6 +36,8 @@ export default function NewRecipePage() {
   const [sourceUrl, setSourceUrl] = useState('')
   const [translate, setTranslate] = useState(true)
   const [busy, setBusy] = useState(false)
+  // photo mode
+  const [photos, setPhotos] = useState<File[]>([])
 
   // Rich pastes (copied from a web page) arrive as HTML: convert, keep headings and lists.
   function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
@@ -59,6 +64,29 @@ export default function NewRecipePage() {
         draft: draftFromLlm(recipe, {
           foods, visibility, translated: translate, rawText: cleaned,
           sourceUrl: sourceUrl.trim() || (cleaned.match(/https?:\/\/\S+/)?.[0] ?? ''),
+        }),
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onImportImages() {
+    setError(null)
+    if (photos.length === 0) {
+      setError('Velg minst ett bilde først.')
+      return
+    }
+    setBusy(true)
+    try {
+      const prepared = await Promise.all(photos.map(prepareForAi))
+      const recipe = await importRecipeFromImages(prepared, translate)
+      setReview({
+        heading: 'Se over oppskriften',
+        draft: draftFromLlm(recipe, {
+          foods, visibility, translated: translate, rawText: null, sourceUrl: sourceUrl.trim(),
         }),
       })
     } catch (err) {
@@ -146,6 +174,37 @@ export default function NewRecipePage() {
 
           <Button type="button" onClick={onImport} disabled={busy || foodsQuery.isLoading}>
             {busy ? 'Leser oppskriften … (opptil 30 sek)' : 'Importer'}
+          </Button>
+        </div>
+      )}
+
+      {mode === 'bilde' && (
+        <div className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            Ta bilde av en oppskrift i en kokebok eller et blad, eller bruk skjermbilder fra nettet eller sosiale medier.
+            Ta hele siden rett ovenfra, med godt lys. Du får se over alt før det lagres.
+          </p>
+
+          <ImageSourcePicker files={photos} onChange={(f) => { setPhotos(f); setError(null) }} disabled={busy} />
+
+          <div className="space-y-1.5">
+            <Label htmlFor="photo-url">Kilde-URL (valgfritt)</Label>
+            <Input id="photo-url" type="url" placeholder="https://…" value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)} />
+          </div>
+
+          <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={translate} onChange={(e) => setTranslate(e.target.checked)} />
+              Oversett til norsk
+            </label>
+            {visibilityField}
+          </div>
+
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+
+          <Button type="button" onClick={onImportImages} disabled={busy || foodsQuery.isLoading}>
+            {busy ? 'Leser bildene … (opptil 60 sek)' : 'Les oppskriften'}
           </Button>
         </div>
       )}

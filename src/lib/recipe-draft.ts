@@ -101,7 +101,7 @@ export function emptyDraft(visibility: 'public' | 'private' = 'public'): DraftRe
 
 export function draftFromLlm(
   r: Recipe,
-  opts: { foods: Food[]; visibility: 'public' | 'private'; translated: boolean; rawText: string; sourceUrl: string },
+  opts: { foods: Food[]; visibility: 'public' | 'private'; translated: boolean; rawText: string | null; sourceUrl: string },
 ): DraftRecipe {
   return {
     visibility: opts.visibility,
@@ -259,6 +259,8 @@ const LLM_ERRORS: Record<string, string> = {
   not_found: 'Fant ikke oppskriften.',
   text_too_short: 'Teksten er for kort til å være en oppskrift.',
   text_too_long: 'Teksten er for lang. Lim inn bare selve oppskriften.',
+  too_many_images: 'Du kan bruke opptil 4 bilder om gangen.',
+  images_too_large: 'Bildene er for store. Prøv færre bilder eller lavere oppløsning.',
   rate_limited: 'Du har nådd dagens grense for KI-bruk. Prøv igjen i morgen.',
   llm_busy: 'KI-tjenesten er travel akkurat nå. Prøv igjen om litt.',
   llm_failed: 'Kunne ikke tolke svaret fra KI. Prøv igjen.',
@@ -277,6 +279,14 @@ async function invokeLlm(fn: string, body: Record<string, unknown>): Promise<Rec
 /** Calls the import-recipe Edge Function and returns the structured recipe. */
 export function importRecipe(text: string, translate: boolean): Promise<Recipe> {
   return invokeLlm('import-recipe', { text, translate })
+}
+
+/** Same function, with photos or screenshots (already prepared with prepareForAi) instead of text. */
+export function importRecipeFromImages(
+  images: { mime_type: string; data: string }[],
+  translate: boolean,
+): Promise<Recipe> {
+  return invokeLlm('import-recipe', { images, translate })
 }
 
 /** Calls fix-recipe: returns a proposed corrected recipe. Nothing is saved. */
