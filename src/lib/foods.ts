@@ -5,6 +5,8 @@ export interface Food {
   id: number
   name_no: string
   aliases: string[]
+  /** Mattilsynet food group; mapped to a store aisle via aisle_map. */
+  category: string | null
   /** Normalised helpers, precomputed once. */
   _name: string
   _head: string
@@ -21,7 +23,7 @@ async function fetchFoods(): Promise<Food[]> {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('foods')
-      .select('id, name_no, aliases')
+      .select('id, name_no, aliases, category')
       .order('id')
       .range(from, from + PAGE - 1)
     if (error) throw error

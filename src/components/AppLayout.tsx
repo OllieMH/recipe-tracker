@@ -20,6 +20,7 @@ export default function AppLayout() {
             Oppskrifter
           </Link>
           <NavLink to="/importer" className={navLink}>Importer</NavLink>
+          <NavLink to="/handleliste" className={navLink}>Handleliste</NavLink>
           <NavLink to="/omregning" className={navLink}>Omregning</NavLink>
           {isAdmin && <NavLink to="/admin" className={navLink}>Admin</NavLink>}
           <button

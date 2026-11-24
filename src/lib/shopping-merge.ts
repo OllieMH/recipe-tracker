@@ -261,6 +261,143 @@ export function convertLines(
   return updates
 }
 
+/** Units a user can pick when only the label is wrong (the number is kept as it is). */
+export const CANONICAL_UNITS = [
+  'stk', 'g', 'kg', 'dl', 'l', 'ml', 'ss', 'ts', 'krm', 'fedd', 'pk', 'boks', 'bunt', 'neve', 'klype', 'skive', 'kvist',
+]
+
+/** How much the + and - buttons / amount stepper change a line, per unit. */
+export function stepFor(unit: string | null): number {
+  switch (unit) {
+    case 'g':
+    case 'ml':
+      return 50
+    case 'kg':
+    case 'l':
+    case 'dl':
+    case 'ss':
+    case 'ts':
+      return 0.5
+    default:
+      return 1
+  }
+}
+
+/** A few sensible "add this much" buttons for a unit (two or three, not a wall of options). */
+export function quickSteps(unit: string | null): number[] {
+  switch (unit) {
+    case 'g':
+    case 'ml':
+      return [50, 100, 250]
+    case 'kg':
+      return [0.1, 0.5, 1]
+    case 'l':
+      return [0.5, 1, 2]
+    case 'dl':
+    case 'ss':
+    case 'ts':
+      return [0.5, 1, 2]
+    case 'krm':
+      return [1, 2]
+    default:
+      return [1, 2, 5]
+  }
+}
+
+export interface LineAdjustment {
+  updates: RowUpdate[]
+  /** Rows used up by a decrease; delete them. */
+  deleteIds: number[]
+}
+
+/**
+ * Change the total of a line to `newAmount` by editing its source rows:
+ *   - more: added to the most recently added row;
+ *   - less: taken from the most recently added rows first, deleting a row that
+ *     is used up. Recipe contributions older than that are touched last.
+ * A manually set amount drops ranges and the undo record of the rows it touches.
+ * Throws for lines without an amount, or when newAmount is not above zero.
+ */
+export function adjustLine(line: ShoppingLine, newAmount: number): LineAdjustment {
+  if (line.amount == null) throw new Error('Line has no amount')
+  if (!(newAmount > 0) || !Number.isFinite(newAmount)) throw new Error('Amount must be above zero')
+
+  const target = clean(newAmount)
+  const delta = clean(target - line.amount)
+  if (delta === 0) return { updates: [], deleteIds: [] }
+
+  const touched = (item: MergeItem, amount: number): RowUpdate => ({
+    id: item.id,
+    amount,
+    amount_max: null,
+    unit: item.unit,
+    orig_amount: null,
+    orig_amount_max: null,
+    orig_unit: null,
+  })
+
+  const rows = line.items
+  if (delta > 0) {
+    const last = rows[rows.length - 1]
+    return { updates: [touched(last, clean((last.amount ?? 0) + delta))], deleteIds: [] }
+  }
+
+  let need = -delta
+  const updates: RowUpdate[] = []
+  const deleteIds: number[] = []
+  for (let i = rows.length - 1; i >= 0 && need > 0; i--) {
+    const row = rows[i]
+    const have = row.amount ?? 0
+    if (have > need) {
+      updates.push(touched(row, clean(have - need)))
+      need = 0
+    } else {
+      deleteIds.push(row.id)
+      need = clean(need - have)
+    }
+  }
+  return { updates, deleteIds }
+}
+
+/**
+ * Give an amount to a line that has none ("salt", "etter smak"). The first row
+ * gets the amount and unit; the other amount-less rows were duplicates and go.
+ */
+export function giveAmount(line: ShoppingLine, amount: number, unit: string | null): LineAdjustment {
+  if (line.amount != null) throw new Error('Line already has an amount')
+  if (!(amount > 0) || !Number.isFinite(amount)) throw new Error('Amount must be above zero')
+  const [first, ...rest] = line.items
+  return {
+    updates: [
+      {
+        id: first.id,
+        amount: clean(amount),
+        amount_max: null,
+        unit,
+        orig_amount: null,
+        orig_amount_max: null,
+        orig_unit: null,
+      },
+    ],
+    deleteIds: rest.map((r) => r.id),
+  }
+}
+
+/** Change only the unit label of a line (the number stays). Clears undo and keeps ranges. */
+export function relabelLine(line: ShoppingLine, unit: string): RowUpdate[] {
+  return line.items
+    .filter((i) => i.amount != null)
+    .map((i) => ({
+      id: i.id,
+      amount: i.amount,
+      amount_max: i.amount_max,
+      unit,
+      orig_amount: null,
+      orig_amount_max: null,
+      orig_unit: null,
+    }))
+}
+
 /** Merge a suggestion into the chosen unit. */
 export const applyMerge = (
   suggestion: MergeSuggestion,

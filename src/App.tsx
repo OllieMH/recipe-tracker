@@ -8,6 +8,8 @@ import ImportPage from '@/routes/ImportPage'
 import RecipeDetailPage from '@/routes/RecipeDetailPage'
 import RecipeEditPage from '@/routes/RecipeEditPage'
 import ConverterPage from '@/routes/ConverterPage'
+import ShoppingListsPage from '@/routes/ShoppingListsPage'
+import ShoppingListPage from '@/routes/ShoppingListPage'
 import AdminPage from '@/routes/AdminPage'
 import AuthGuard from '@/components/AuthGuard'
 import AdminGuard from '@/components/AdminGuard'
@@ -35,6 +37,8 @@ export default function App() {
           <Route path="/oppskrift/:id" element={<RecipeDetailPage />} />
           <Route path="/oppskrift/:id/rediger" element={<RecipeEditPage />} />
           <Route path="/omregning" element={<ConverterPage />} />
+          <Route path="/handleliste" element={<ShoppingListsPage />} />
+          <Route path="/handleliste/:id" element={<ShoppingListPage />} />
           <Route element={<AdminGuard />}>
             <Route path="/admin" element={<AdminPage />} />
           </Route>

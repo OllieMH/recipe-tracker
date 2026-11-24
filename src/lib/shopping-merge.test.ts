@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  adjustLine,
+  quickSteps,
+  giveAmount,
+  relabelLine,
+  stepFor,
   applyMerge,
   conversionOptions,
   convertAmount,
@@ -306,6 +311,123 @@ describe('undoUpdates', () => {
     rows = applyRows(rows, convertLines(mergeItems(rows), 'ml'))
     rows = applyRows(rows, undoUpdates(mergeItems(rows)))
     expect(rows[0]).toMatchObject({ amount: 1, amount_max: 2, unit: 'dl' })
+  })
+})
+
+describe('adjustLine (editing a total)', () => {
+  const lineOf = (...rows: MergeItem[]) => mergeItems(rows)[0]
+
+  it('adds an increase to the most recently added row', () => {
+    const a = item({ name: 'egg', amount: 2, position: 1, recipe_title: 'Kake' })
+    const b = item({ name: 'egg', amount: 1, position: 2 })
+    const { updates, deleteIds } = adjustLine(lineOf(a, b), 5)
+    expect(deleteIds).toEqual([])
+    expect(updates).toHaveLength(1)
+    expect(updates[0]).toMatchObject({ id: b.id, amount: 3, unit: null })
+  })
+
+  it('takes a decrease from the newest rows first, keeping older recipe rows', () => {
+    const a = item({ name: 'egg', amount: 2, position: 1, recipe_title: 'Kake' })
+    const b = item({ name: 'egg', amount: 1, position: 2 })
+    const { updates, deleteIds } = adjustLine(lineOf(a, b), 2)
+    expect(deleteIds).toEqual([b.id])
+    expect(updates).toEqual([])
+  })
+
+  it('reduces across rows and deletes the ones used up', () => {
+    const a = item({ name: 'egg', amount: 3, position: 1 })
+    const b = item({ name: 'egg', amount: 1, position: 2 })
+    const c = item({ name: 'egg', amount: 1, position: 3 })
+    const { updates, deleteIds } = adjustLine(lineOf(a, b, c), 2)
+    expect(deleteIds).toEqual([c.id, b.id])
+    expect(updates).toEqual([expect.objectContaining({ id: a.id, amount: 2 })])
+  })
+
+  it('keeps a row when the decrease leaves something', () => {
+    const a = item({ name: 'melk', amount: 5, unit: 'dl' })
+    const { updates, deleteIds } = adjustLine(lineOf(a), 3.5)
+    expect(deleteIds).toEqual([])
+    expect(updates[0]).toMatchObject({ id: a.id, amount: 3.5, unit: 'dl' })
+  })
+
+  it('drops ranges and the undo record of touched rows', () => {
+    const a = item({ name: 'fløte', amount: 1, amount_max: 2, unit: 'dl', orig_amount: 1, orig_unit: 'ss' })
+    const { updates } = adjustLine(lineOf(a), 3)
+    expect(updates[0]).toMatchObject({ amount: 3, amount_max: null, orig_amount: null, orig_amount_max: null, orig_unit: null })
+  })
+
+  it('does nothing when the amount is unchanged', () => {
+    expect(adjustLine(lineOf(item({ name: 'egg', amount: 2 })), 2)).toEqual({ updates: [], deleteIds: [] })
+  })
+
+  it('rejects zero, negative and lines without an amount', () => {
+    expect(() => adjustLine(lineOf(item({ name: 'egg', amount: 2 })), 0)).toThrow()
+    expect(() => adjustLine(lineOf(item({ name: 'egg', amount: 2 })), -1)).toThrow()
+    expect(() => adjustLine(lineOf(item({ name: 'salt' })), 1)).toThrow()
+  })
+
+  it('rounds away float noise', () => {
+    const a = item({ name: 'melk', amount: 0.1, unit: 'l' })
+    expect(adjustLine(lineOf(a), 0.3).updates[0].amount).toBe(0.3)
+  })
+})
+
+describe('giveAmount', () => {
+  it('sets amount and unit on the first row and removes duplicate amount-less rows', () => {
+    const a = item({ name: 'salt', food_id: 5 })
+    const b = item({ name: 'salt', food_id: 5 })
+    const line = mergeItems([a, b])[0]
+    expect(giveAmount(line, 2, 'ts')).toEqual({
+      updates: [{ id: a.id, amount: 2, amount_max: null, unit: 'ts', orig_amount: null, orig_amount_max: null, orig_unit: null }],
+      deleteIds: [b.id],
+    })
+  })
+
+  it('rejects lines that already have an amount and non-positive amounts', () => {
+    expect(() => giveAmount(mergeItems([item({ name: 'egg', amount: 2 })])[0], 3, null)).toThrow()
+    expect(() => giveAmount(mergeItems([item({ name: 'salt' })])[0], 0, null)).toThrow()
+  })
+})
+
+describe('relabelLine / stepFor', () => {
+  it('changes only the unit, keeps numbers and ranges, clears undo', () => {
+    const a = item({ name: 'egg', amount: 2, amount_max: 3 })
+    const b = item({ name: 'egg', amount: 1 })
+    const updates = relabelLine(mergeItems([a, b])[0], 'stk')
+    expect(updates).toEqual([
+      { id: a.id, amount: 2, amount_max: 3, unit: 'stk', orig_amount: null, orig_amount_max: null, orig_unit: null },
+      { id: b.id, amount: 1, amount_max: null, unit: 'stk', orig_amount: null, orig_amount_max: null, orig_unit: null },
+    ])
+  })
+
+  it('a relabelled line merges with existing lines of that unit', () => {
+    const rows = [
+      item({ name: 'egg', food_id: 1, amount: 2 }),
+      item({ name: 'egg', food_id: 1, amount: 4, unit: 'stk' }),
+    ]
+    expect(mergeItems(rows)).toHaveLength(2)
+    const line = mergeItems(rows).find((l) => l.unit == null)!
+    const relabelled = rows.map((r) => ({ ...r, ...(relabelLine(line, 'stk').find((u) => u.id === r.id) ?? {}) }))
+    expect(mergeItems(relabelled)).toHaveLength(1)
+    expect(mergeItems(relabelled)[0]).toMatchObject({ amount: 6, unit: 'stk' })
+  })
+
+  it('offers two or three quick steps per unit, smallest first', () => {
+    for (const u of ['g', 'ml', 'kg', 'l', 'dl', 'ss', 'ts', 'krm', 'stk', 'pk', null]) {
+      const steps = quickSteps(u)
+      expect(steps.length).toBeGreaterThanOrEqual(2)
+      expect(steps.length).toBeLessThanOrEqual(3)
+      expect([...steps].sort((a, b) => a - b)).toEqual(steps)
+    }
+    expect(quickSteps('g')).toEqual([50, 100, 250])
+    expect(quickSteps('kg')).toEqual([0.1, 0.5, 1])
+  })
+
+  it('picks sensible steps', () => {
+    expect(stepFor(null)).toBe(1)
+    expect(stepFor('stk')).toBe(1)
+    expect(stepFor('g')).toBe(50)
+    expect(stepFor('dl')).toBe(0.5)
   })
 })
 
