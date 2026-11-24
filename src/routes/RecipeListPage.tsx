@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
-import { fetchRecipes, formatMinutes, useFavorites, useRecipeList, type RecipeListItem } from '@/lib/recipes'
+import { fetchRecipes, formatMinutes, recipeMatches, useFavorites, useRecipeList, visibleRecipes } from '@/lib/recipes'
 import { downloadBlob } from '@/lib/download'
 import { thumbPathOf, useSignedUrls } from '@/lib/images'
 import RecipeImage from '@/components/RecipeImage'
@@ -18,18 +18,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'mine', label: 'Mine' },
 ]
 
-const norm = (s: string) => s.toLowerCase()
-
-function matches(r: RecipeListItem, q: string): boolean {
-  if (!q) return true
-  const hay = [
-    r.title,
-    ...r.tags,
-    ...r.ingredient_groups.flatMap((g) => g.ingredients.map((i) => i.name)),
-  ].map(norm)
-  return q.split(/\s+/).every((word) => hay.some((h) => h.includes(word)))
-}
-
 export default function RecipeListPage() {
   const { user } = useAuth()
   const recipes = useRecipeList()
@@ -41,11 +29,7 @@ export default function RecipeListPage() {
   const [exportError, setExportError] = useState<string | null>(null)
 
   // If the user has a private copy of a recipe, show the copy instead of the original.
-  const visible = useMemo(() => {
-    const all = recipes.data ?? []
-    const replaced = new Set(all.filter((r) => r.parent_id && r.owner_id === user?.id).map((r) => r.parent_id))
-    return all.filter((r) => !replaced.has(r.id))
-  }, [recipes.data, user?.id])
+  const visible = useMemo(() => visibleRecipes(recipes.data ?? [], user?.id), [recipes.data, user?.id])
 
   // Thumbnails for every recipe, requested once so filtering does not refetch URLs.
   const thumbUrls = useSignedUrls(visible.map((r) => (r.image_path ? thumbPathOf(r.image_path) : null)))
@@ -80,14 +64,14 @@ export default function RecipeListPage() {
     }
   }
 
-  const q = norm(query.trim())
+  const q = query.trim().toLowerCase()
   const shown = visible.filter(
     (r) =>
       (tab === 'alle' ||
         (tab === 'mine' && r.owner_id === user?.id) ||
         (tab === 'favoritter' && favorites.data?.has(r.id))) &&
       (!tag || r.tags.includes(tag)) &&
-      matches(r, q),
+      recipeMatches(r, q),
   )
 
   return (

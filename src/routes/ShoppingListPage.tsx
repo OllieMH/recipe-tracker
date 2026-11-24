@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, BookOpen, Pencil, Plus, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { autoMatchFood, useFoods } from '@/lib/foods'
 import { useMeasures } from '@/lib/recipes'
@@ -34,6 +34,7 @@ import {
 } from '@/lib/shopping-merge'
 import ShoppingLineRow from '@/components/ShoppingLineRow'
 import MergePrompt from '@/components/MergePrompt'
+import AddRecipeToList from '@/components/AddRecipeToList'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -86,6 +87,7 @@ export default function ShoppingListPage() {
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [pickingRecipe, setPickingRecipe] = useState(false)
   const [dismissed, dismiss] = useDismissed(id)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -102,6 +104,18 @@ export default function ShoppingListPage() {
   )
   const suggestionByFood = useMemo(() => new Map(suggestions.map((s) => [s.foodKey, s])), [suggestions])
   const openGroups = useMemo(() => groupByAisle(openLines), [openLines])
+
+  // Recipes whose items are on this list, so a whole recipe can be taken off again.
+  const recipesOnList = useMemo(() => {
+    const byId = new Map<string, { id: string; title: string; rowIds: number[] }>()
+    for (const i of items) {
+      if (!i.recipe_id) continue
+      const r = byId.get(i.recipe_id) ?? { id: i.recipe_id, title: i.recipe_title ?? 'Oppskrift', rowIds: [] }
+      r.rowIds.push(i.id)
+      byId.set(i.recipe_id, r)
+    }
+    return [...byId.values()]
+  }, [items])
 
   const checkedRows = items.filter((i) => i.checked).length
   const mutationError = [addItem, setChecked, deleteItems, clearChecked, editRows, rename, deleteList].find((m) => m.isError)
@@ -210,6 +224,34 @@ export default function ShoppingListPage() {
           <Plus className="size-4" /> Legg til
         </Button>
       </form>
+
+      <div>
+        <Button variant="outline" size="sm" onClick={() => setPickingRecipe(true)}>
+          <BookOpen aria-hidden /> Legg til oppskrift
+        </Button>
+      </div>
+      {pickingRecipe && (
+        <AddRecipeToList list={{ id, name: list.data.name }} onClose={() => setPickingRecipe(false)} />
+      )}
+
+      {recipesOnList.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Fra oppskrifter:</span>
+          {recipesOnList.map((r) => (
+            <span key={r.id} className="inline-flex items-center rounded-full border border-border bg-card pl-3">
+              <Link to={`/oppskrift/${r.id}`} className="py-1 hover:underline">{r.title}</Link>
+              <button
+                type="button"
+                aria-label={`Fjern ${r.title} fra listen`}
+                onClick={() => deleteItems.mutate(r.rowIds)}
+                className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
+              >
+                <X className="size-4" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {mutationError && <p role="alert" className="text-sm text-destructive">Noe gikk galt. Prøv igjen.</p>}
       {itemsQuery.isLoading && <p className="text-sm text-muted-foreground">Laster varer …</p>}

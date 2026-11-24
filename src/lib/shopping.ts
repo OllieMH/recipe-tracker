@@ -132,9 +132,13 @@ export function useShoppingItems(listId: string | undefined) {
 export interface NewItem {
   name: string
   amount: number | null
+  amount_max?: number | null
   unit: string | null
   food_id: number | null
   aisle: string
+  /** Set for items that come from a recipe (a snapshot; later recipe edits do not change the list). */
+  recipe_id?: string | null
+  recipe_title?: string | null
 }
 
 export function useAddItem(listId: string) {
@@ -148,6 +152,46 @@ export function useAddItem(listId: string) {
       void qc.invalidateQueries({ queryKey: itemsKey(listId) })
       void qc.invalidateQueries({ queryKey: ['shopping', 'counts'] })
     },
+  })
+}
+
+/** Rows of one recipe already on a list (so the UI can say it will be replaced). */
+export function useRecipeRows(listId: string | undefined, recipeId: string) {
+  return useQuery({
+    queryKey: ['shopping', 'recipe-rows', listId, recipeId],
+    enabled: !!listId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('shopping_list_items')
+        .select('id')
+        .eq('list_id', listId!)
+        .eq('recipe_id', recipeId)
+      if (error) throw error
+      return data.length
+    },
+  })
+}
+
+/**
+ * Put a recipe on a list. If the recipe is already there its old rows are
+ * replaced: the new rows go in first, then the old ones are removed, so a
+ * failure leaves duplicates rather than losing items.
+ */
+export function useAddRecipeToList() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ listId, recipeId, items }: { listId: string; recipeId: string; items: NewItem[] }) => {
+      if (items.length === 0) throw new Error('No items to add')
+      const old = await supabase.from('shopping_list_items').select('id').eq('list_id', listId).eq('recipe_id', recipeId)
+      if (old.error) throw old.error
+      const ins = await supabase.from('shopping_list_items').insert(items.map((i) => ({ list_id: listId, ...i })))
+      if (ins.error) throw ins.error
+      if (old.data.length > 0) {
+        const del = await supabase.from('shopping_list_items').delete().in('id', old.data.map((o) => o.id))
+        if (del.error) throw del.error
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shopping'] }),
   })
 }
 

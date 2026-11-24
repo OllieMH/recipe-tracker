@@ -19,8 +19,9 @@ import { formatNumber, formatRange, scaleAmount, scaleFactor } from '@/lib/scali
 import { Button } from '@/components/ui/button'
 import CollapsibleSection from '@/components/CollapsibleSection'
 import FixWithAi from '@/components/FixWithAi'
+import AddToList from '@/components/AddToList'
 import { cn } from '@/lib/utils'
-import { ChevronLeft, Clock, Download, ExternalLink, Languages, Lock, Minus, Plus, Star, Timer } from 'lucide-react'
+import { ChevronLeft, Clock, Download, ExternalLink, Languages, Lock, Minus, Plus, ShoppingBasket, Star, Timer } from 'lucide-react'
 
 type Ingredient = RecipeDetail['ingredient_groups'][number]['ingredients'][number]
 
@@ -114,6 +115,8 @@ export default function RecipeDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [showFix, setShowFix] = useState(false)
+  const [showList, setShowList] = useState(false)
+  const [addedTo, setAddedTo] = useState<{ id: string; name: string } | null>(null)
   const [copying, setCopying] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -243,6 +246,11 @@ export default function RecipeDetailPage() {
           </p>
         )}
         {notice && <p role="status" className="rounded-lg bg-secondary p-3 text-sm print:hidden">{notice}</p>}
+        {addedTo && (
+          <p role="status" className="rounded-lg bg-secondary p-3 text-sm print:hidden">
+            Lagt til i «{addedTo.name}». <Link to={`/handleliste/${addedTo.id}`} className="font-semibold underline">Åpne listen</Link>
+          </p>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           <Button
@@ -262,6 +270,10 @@ export default function RecipeDetailPage() {
               {copying ? 'Lager kopi …' : 'Lag min versjon'}
             </Button>
           )}
+          <Button variant="outline" size="sm" onClick={() => { setAddedTo(null); setShowList(true) }}>
+            <ShoppingBasket aria-hidden />
+            Legg til i handleliste
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowFix(true)}>Fiks med AI</Button>
           <ShareMenu onMarkdown={downloadMarkdown} onCopy={copyText} copied={copied} />
         </div>
@@ -275,6 +287,19 @@ export default function RecipeDetailPage() {
           canEdit={canEdit}
           myCopyId={myCopy.data?.id ?? null}
           onClose={() => setShowFix(false)}
+        />
+      )}
+
+      {showList && (
+        <AddToList
+          recipe={r}
+          baseServings={baseServings}
+          initialServings={servings}
+          servingsUnit={r.servings_unit ?? 'porsjoner'}
+          grams={grams}
+          measures={measures.data}
+          onClose={() => setShowList(false)}
+          onAdded={(list) => { setShowList(false); setAddedTo(list) }}
         />
       )}
 

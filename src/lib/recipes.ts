@@ -20,6 +20,21 @@ export function useRecipeList() {
   return useQuery({ queryKey: ['recipes', 'list'], queryFn: fetchRecipeList })
 }
 
+/** Search over title, tags and ingredient names; every word must match somewhere. */
+export function recipeMatches(r: RecipeListItem, q: string): boolean {
+  if (!q) return true
+  const hay = [r.title, ...r.tags, ...r.ingredient_groups.flatMap((g) => g.ingredients.map((i) => i.name))].map((s) =>
+    s.toLowerCase(),
+  )
+  return q.split(/\s+/).every((word) => hay.some((h) => h.includes(word)))
+}
+
+/** If you have a private copy of a recipe, the copy is shown instead of the original. */
+export function visibleRecipes(all: RecipeListItem[], userId: string | undefined): RecipeListItem[] {
+  const replaced = new Set(all.filter((r) => r.parent_id && r.owner_id === userId).map((r) => r.parent_id))
+  return all.filter((r) => !replaced.has(r.id))
+}
+
 // ---------- detail ----------
 
 const DETAIL_SELECT = '*, ingredient_groups(*, ingredients(*)), steps(*)'
