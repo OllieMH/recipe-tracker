@@ -76,6 +76,11 @@ export default function OfflineQueryProvider({ client, children }: { client: Que
 
   return (
     <PersistQueryClientProvider
+      // The provider restores and starts saving ONCE, with the persister it has when it first
+      // mounts, and ignores later changes to persistOptions. Auth is still loading at first mount
+      // (no user yet, so no persister), so without a key the real persister would never be
+      // connected and nothing would be saved. A new key per user mounts it afresh.
+      key={cacheUser ?? 'signed-out'}
       client={client}
       persistOptions={persistOptions}
       // Edits that were waiting when the app was closed are sent now (needs the network).
