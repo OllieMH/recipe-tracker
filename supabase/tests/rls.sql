@@ -417,6 +417,24 @@ begin
     select count(*) into n from public.aisle_map;
     assert n = 0, format('anon can read %s aisle_map row(s)', n);
   exception when insufficient_privilege then null; end;
+
+  -- RLS helpers and RPCs must not be callable without signing in
+  begin
+    perform public.is_admin();
+    raise exception 'anon executed is_admin';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.owns_recipe(gen_random_uuid());
+    raise exception 'anon executed owns_recipe';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.can_edit_recipe(gen_random_uuid());
+    raise exception 'anon executed can_edit_recipe';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.create_list('anon list');
+    raise exception 'anon executed create_list';
+  exception when insufficient_privilege then null; end;
 end $$;
 
 reset role;
