@@ -19,7 +19,7 @@ export default function AppLayout() {
       <header className="bg-primary pt-[env(safe-area-inset-top)] text-primary-foreground print:hidden">
         {/* Phone: title and "Logg ut" on the first row, the links on their own row below.
             From sm up everything sits on one line. */}
-        <nav className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
+        <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
           <Link to="/" className="order-1 mr-3 text-xl font-extrabold tracking-tight text-white">
             Oppskrifter
           </Link>

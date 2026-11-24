@@ -191,7 +191,7 @@ export default function RecipeDetailPage() {
   const staleOriginal = r.parent_id && parent.data && new Date(parent.data.updated_at) > new Date(r.created_at)
 
   return (
-    <main className="mx-auto max-w-3xl space-y-8 p-4 pb-16">
+    <main className="mx-auto max-w-3xl space-y-8 p-4 pb-16 lg:max-w-5xl">
       <div className="space-y-4">
         <Link to="/" className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground print:hidden">
           <ChevronLeft className="size-4" aria-hidden />
@@ -313,6 +313,10 @@ export default function RecipeDetailPage() {
 
       {r.description && <p className="prose-recipe text-lg">{r.description}</p>}
 
+      {/* From laptop width: ingredients on the left (they stay in view while you read the steps),
+          steps and tips on the right. Below that, and when printing, it is one column in the same order. */}
+      <div className="space-y-8 lg:grid lg:grid-cols-[5fr_7fr] lg:items-start lg:gap-10 lg:space-y-0 print:block print:space-y-8">
+      <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto print:static print:max-h-none print:overflow-visible">
       <CollapsibleSection
         id="ingredients"
         title="Ingredienser"
@@ -386,7 +390,9 @@ export default function RecipeDetailPage() {
           <p className="text-sm text-muted-foreground">* Omregnet fra amerikanske mål. Trykk på ingrediensen for originalen.</p>
         )}
       </CollapsibleSection>
+      </div>
 
+      <div className="space-y-8">
       <CollapsibleSection id="steps" title="Fremgangsmåte">
         <ol className="space-y-6">
           {r.steps.map((s, i) => (
@@ -410,6 +416,8 @@ export default function RecipeDetailPage() {
           </ul>
         </CollapsibleSection>
       )}
+      </div>
+      </div>
     </main>
   )
 }
