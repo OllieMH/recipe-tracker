@@ -1,6 +1,7 @@
 // Shopping lists: queries and mutations. Pure display/merge rules live in
 // shopping-merge.ts; this file only talks to Supabase and keeps the cache fresh.
 
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import type { Database } from '@/types/database'
@@ -108,6 +109,106 @@ export function useDeleteList(id: string) {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shopping'] }),
   })
+}
+
+// ---------- members and sharing ----------
+
+export interface ListMember {
+  user_id: string
+  /** Display name, or the email when there is no display name. */
+  label: string
+  is_owner: boolean
+}
+
+const membersKey = (listId: string) => ['shopping', 'members', listId] as const
+
+export function useListMembers(listId: string | undefined) {
+  return useQuery({
+    queryKey: membersKey(listId ?? ''),
+    enabled: !!listId,
+    queryFn: async (): Promise<ListMember[]> => {
+      const { data, error } = await supabase.rpc('list_members', { p_list_id: listId! })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+/** Owner shares the list with an existing user, by email. Sharing twice is harmless. */
+export function useShareList(listId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (email: string) => {
+      const { error } = await supabase.rpc('share_list', { p_list_id: listId, p_email: email.trim() })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: membersKey(listId) }),
+  })
+}
+
+export function useRemoveMember(listId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await supabase.rpc('remove_list_member', { p_list_id: listId, p_user_id: userId })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: membersKey(listId) }),
+  })
+}
+
+/** A member leaves. Access is gone at once; the owner has to share the list again. */
+export function useLeaveList(listId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await supabase
+        .from('shopping_list_members')
+        .delete()
+        .eq('list_id', listId)
+        .eq('user_id', userId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shopping'] }),
+  })
+}
+
+/**
+ * Live updates: when someone else changes this list the cache is refreshed.
+ * Realtime only delivers rows the signed-in user may see (RLS). Bursts of events
+ * are coalesced into one refetch so rapid ticking does not flicker.
+ */
+export function useListRealtime(listId: string | undefined) {
+  const qc = useQueryClient()
+  useEffect(() => {
+    if (!listId) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const refresh = (...keys: (readonly unknown[])[]) => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        for (const queryKey of keys) void qc.invalidateQueries({ queryKey })
+      }, 250)
+    }
+
+    const channel = supabase
+      .channel(`shopping-list-${listId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shopping_list_items', filter: `list_id=eq.${listId}` },
+        () => refresh(itemsKey(listId), ['shopping', 'counts']),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shopping_list_members', filter: `list_id=eq.${listId}` },
+        () => refresh(membersKey(listId), ['shopping', 'list', listId]),
+      )
+      .subscribe()
+
+    return () => {
+      clearTimeout(timer)
+      void supabase.removeChannel(channel)
+    }
+  }, [listId, qc])
 }
 
 // ---------- items ----------

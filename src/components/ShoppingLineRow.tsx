@@ -17,6 +17,8 @@ import {
 
 interface Props {
   line: ShoppingLine
+  /** Small extra line under the name, e.g. "avhuket av Anna". */
+  note?: string
   measures: MeasuresByFood | undefined
   onToggle: () => void
   onRemove: () => void
@@ -39,7 +41,7 @@ const parseAmount = (s: string): number | null => {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-export default function ShoppingLineRow({ line, measures, onToggle, onRemove, onUndo, onConvert, onSetUnit, onSetAmount }: Props) {
+export default function ShoppingLineRow({ line, note, measures, onToggle, onRemove, onUndo, onConvert, onSetUnit, onSetAmount }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [pendingUnit, setPendingUnit] = useState<string | null>(null)
@@ -136,6 +138,7 @@ export default function ShoppingLineRow({ line, measures, onToggle, onRemove, on
             {line.recipes.length > 0 && (
               <span className="block text-xs text-muted-foreground">fra {line.recipes.join(', ')}</span>
             )}
+            {note && <span className="block text-xs text-muted-foreground">{note}</span>}
           </span>
           {hasAmount ? (
             <span

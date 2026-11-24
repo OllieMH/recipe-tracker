@@ -278,6 +278,8 @@ begin
 
   select count(*) into n from public.display_names(array['aaaaaaaa-0000-0000-0000-000000000001']::uuid[]);
   assert n = 0, 'display_names must not reveal people you share no list with';
+  select count(*) into n from public.list_members(lid);
+  assert n = 0, 'list_members must return nothing to a non-member';
 end $$;
 
 -- alice shares with bob
@@ -290,6 +292,8 @@ begin
   perform public.share_list(lid, 'bob@test.invalid');  -- idempotent
   select count(*) into n from public.shopping_list_members where list_id = lid;
   assert n = 2, 'list should have alice and bob as members';
+  select count(*) into n from public.list_members(lid) where is_owner and label = 'alice';
+  assert n = 1, 'list_members should show the owner, by display name';
 end $$;
 
 -- bob, now a member

@@ -605,6 +605,14 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_list_member: { Args: { lid: string }; Returns: boolean }
       is_list_owner: { Args: { lid: string }; Returns: boolean }
+      list_members: {
+        Args: { p_list_id: string }
+        Returns: {
+          is_owner: boolean
+          label: string
+          user_id: string
+        }[]
+      }
       owns_recipe: { Args: { recipe_id: string }; Returns: boolean }
       remove_list_member: {
         Args: { p_list_id: string; p_user_id: string }

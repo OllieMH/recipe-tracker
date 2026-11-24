@@ -26,6 +26,8 @@ export interface MergeItem {
   recipe_id: string | null
   recipe_title: string | null
   position: number
+  /** Who ticked the item (set by the database); used for "avhuket av …". */
+  checked_by?: string | null
   /** What the row was before its first unit conversion; null when never converted. */
   orig_amount: number | null
   orig_amount_max: number | null

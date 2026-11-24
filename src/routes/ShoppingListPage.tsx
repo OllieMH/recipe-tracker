@@ -13,6 +13,8 @@ import {
   useDeleteItems,
   useDeleteList,
   useEditRows,
+  useListMembers,
+  useListRealtime,
   useRenameList,
   useSetChecked,
   useShoppingItems,
@@ -35,6 +37,7 @@ import {
 import ShoppingLineRow from '@/components/ShoppingLineRow'
 import MergePrompt from '@/components/MergePrompt'
 import AddRecipeToList from '@/components/AddRecipeToList'
+import ShareListPanel from '@/components/ShareListPanel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -72,6 +75,8 @@ export default function ShoppingListPage() {
 
   const list = useShoppingList(id)
   const itemsQuery = useShoppingItems(id)
+  const members = useListMembers(id)
+  useListRealtime(id)
   const foods = useFoods()
   const aisleMap = useAisleMap()
 
@@ -161,10 +166,23 @@ export default function ShoppingListPage() {
     rename.mutate(newName, { onSuccess: () => setRenaming(false) })
   }
 
+  // "avhuket av Anna": only on shared lists, and only for other people's ticks
+  const labelById = new Map((members.data ?? []).map((m) => [m.user_id, m.label]))
+  const tickedBy = (line: ShoppingLine): string | undefined => {
+    if (!line.checked || labelById.size < 2) return undefined
+    const names = [
+      ...new Set(
+        line.items.flatMap((i) => (i.checked_by && i.checked_by !== user?.id ? [labelById.get(i.checked_by) ?? 'noen'] : [])),
+      ),
+    ]
+    return names.length > 0 ? `avhuket av ${names.join(', ')}` : undefined
+  }
+
   const renderLine = (line: ShoppingLine) => (
     <ShoppingLineRow
       key={line.id}
       line={line}
+      note={tickedBy(line)}
       measures={measures.data}
       onToggle={() => setChecked.mutate({ ids: line.items.map((r) => r.id), checked: !line.checked })}
       onRemove={() => deleteItems.mutate(line.items.map((r) => r.id))}
@@ -210,6 +228,13 @@ export default function ShoppingListPage() {
           {items.length > 0 ? `${items.length - checkedRows} igjen av ${items.length}` : 'Ingen varer ennå'}
         </p>
       </header>
+
+      <ShareListPanel
+        listId={id}
+        isOwner={isOwner}
+        userId={user?.id}
+        onLeft={() => navigate('/handleliste', { replace: true })}
+      />
 
       <form onSubmit={onAdd} className="flex gap-2">
         <Input
