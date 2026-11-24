@@ -44,17 +44,21 @@ do $$
 declare n int;
 begin
   -- reads
-  select count(*) into n from public.recipes;
-  assert n = 1, format('bob should see only the public recipe, saw %s', n);
+  -- Counts are scoped to the fixtures so the script also works on a database
+  -- that already contains real recipes.
+  select count(*) into n from public.recipes
+    where id in ('11111111-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000002');
+  assert n = 1, format('bob should see only the public fixture recipe, saw %s', n);
 
   select count(*) into n from public.recipes where id = '22222222-0000-0000-0000-000000000002';
   assert n = 0, 'bob must not see alice''s private recipe';
 
-  select count(*) into n from public.ingredients;
-  assert n = 1, format('bob should see only the public recipe''s ingredients, saw %s', n);
+  select count(*) into n from public.ingredients where group_id in (900001, 900002);
+  assert n = 1, format('bob should see only the public fixture ingredient, saw %s', n);
 
-  select count(*) into n from public.steps;
-  assert n = 1, format('bob should see only the public recipe''s steps, saw %s', n);
+  select count(*) into n from public.steps
+    where recipe_id in ('11111111-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000002');
+  assert n = 1, format('bob should see only the public fixture step, saw %s', n);
 
   select count(*) into n from public.profiles;
   assert n = 1, format('bob should see only his own profile, saw %s', n);
@@ -183,12 +187,21 @@ set local role anon;
 do $$
 declare n int;
 begin
-  select count(*) into n from public.recipes;
-  assert n = 0, format('anon can read %s recipe(s) without logging in', n);
-  select count(*) into n from public.ingredients;
-  assert n = 0, format('anon can read %s ingredient(s) without logging in', n);
-  select count(*) into n from public.steps;
-  assert n = 0, format('anon can read %s step(s) without logging in', n);
+  -- After the require_login migration anon has no table privileges at all, so
+  -- the query raises "permission denied" (insufficient_privilege). Seeing zero
+  -- rows would also be acceptable; seeing any row is a failure.
+  begin
+    select count(*) into n from public.recipes;
+    assert n = 0, format('anon can read %s recipe(s) without logging in', n);
+  exception when insufficient_privilege then null; end;
+  begin
+    select count(*) into n from public.ingredients;
+    assert n = 0, format('anon can read %s ingredient(s) without logging in', n);
+  exception when insufficient_privilege then null; end;
+  begin
+    select count(*) into n from public.steps;
+    assert n = 0, format('anon can read %s step(s) without logging in', n);
+  exception when insufficient_privilege then null; end;
 end $$;
 
 reset role;
