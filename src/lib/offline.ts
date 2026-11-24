@@ -60,6 +60,16 @@ export function readStoredUser(): User | null {
 
 // ---------- what is kept on the phone ----------
 
+/**
+ * Should this query go into the copy saved on the phone? Anything we keep for
+ * offline use that has data. A refresh that failed (for instance the moment the
+ * network drops) leaves the query in an error state but keeps its last good data,
+ * so it must stay in the saved copy: dropping it there is what made lists vanish.
+ */
+export function shouldStoreQuery(query: { queryKey: readonly unknown[]; state: { data: unknown } }): boolean {
+  return query.state.data !== undefined && isStoredQuery(query.queryKey)
+}
+
 const STORED_ROOTS = new Set(['shopping', 'foods', 'measures', 'aisle-map', 'aisle-overrides', 'is-admin'])
 
 /**

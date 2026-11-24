@@ -18,7 +18,8 @@ const storage = {
 }
 
 export function createUserPersister(userId: string): Persister {
-  return createAsyncStoragePersister({ storage, key: cacheKey(userId), throttleTime: 1000 })
+  // Short throttle: an app that is switched away from can be discarded within seconds.
+  return createAsyncStoragePersister({ storage, key: cacheKey(userId), throttleTime: 250 })
 }
 
 /** Used while nobody is signed in: saves and restores nothing. */

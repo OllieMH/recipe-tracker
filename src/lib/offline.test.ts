@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { authStorageKey, isNetworkError, isStoredQuery, storedSessionUser } from './offline'
+import { authStorageKey, isNetworkError, isStoredQuery, shouldStoreQuery, storedSessionUser } from './offline'
 
 describe('offline helpers', () => {
   it('finds the saved login, and only a usable one', () => {
@@ -18,6 +18,14 @@ describe('offline helpers', () => {
     for (const key of [['recipes', 'list'], ['image-urls', ['a']], ['favorites', 'u1'], ['shopping', 'recipe-rows', 'l1', 'r1'], []]) {
       expect(isStoredQuery(key)).toBe(false)
     }
+  })
+
+  it('keeps the last good data of a query whose refresh failed, and skips queries with no data', () => {
+    const q = (queryKey: unknown[], data: unknown) => ({ queryKey, state: { data } })
+    expect(shouldStoreQuery(q(['shopping', 'lists'], []))).toBe(true) // an empty list is still data
+    expect(shouldStoreQuery(q(['shopping', 'items', 'l1'], [{ id: 1 }]))).toBe(true)
+    expect(shouldStoreQuery(q(['shopping', 'lists'], undefined))).toBe(false) // never loaded
+    expect(shouldStoreQuery(q(['recipes', 'list'], [{ id: 'r' }]))).toBe(false) // not kept offline
   })
 
   it('tells a failed request (retry later) from a server refusal (give up)', () => {

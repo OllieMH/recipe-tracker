@@ -26,6 +26,17 @@ export function useAuthState(): AuthState {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Offline with an expired token, getSession() keeps retrying the refresh for up to
+    // ~30 seconds before it gives up. Do not make the user stare at "Laster …" meanwhile:
+    // start from the saved login at once, and let getSession() confirm or correct it.
+    if (!navigator.onLine) {
+      const saved = readStoredUser()
+      if (saved) {
+        setUser(saved)
+        setLoading(false)
+      }
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       // With an expired access token and no network, supabase-js reports "no session" but

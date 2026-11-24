@@ -77,9 +77,16 @@ export function useListCounts() {
 }
 
 export function useShoppingList(id: string | undefined) {
+  const qc = useQueryClient()
+  const listsKey = ['shopping', 'lists']
+  type ListRow = { id: string; name: string; owner_id: string; created_at: string }
   return useQuery({
     queryKey: ['shopping', 'list', id],
     enabled: !!id,
+    // The list's name and owner are already in the saved overview. Start from that, so a
+    // list opens offline even when its own entry was not saved; a fetch refines it.
+    initialData: () => qc.getQueryData<ListRow[]>(listsKey)?.find((l) => l.id === id),
+    initialDataUpdatedAt: () => qc.getQueryState(listsKey)?.dataUpdatedAt,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('shopping_lists')
