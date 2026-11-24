@@ -176,11 +176,6 @@ begin
 end $$;
 
 -- ============================================================================
--- anon (not signed in, only holds the public anon key)
--- Recipes are meant for signed-in users only ("Logg inn for å se oppskriftene"),
--- so anon must see nothing. If this fails, public recipes are readable by anyone.
--- ============================================================================
--- ============================================================================
 -- shopping lists (needs the 20261124000002_shopping_lists migration)
 -- alice owns a list; bob is first a non-member, then a member; carol is an
 -- unrelated admin (admins get no special access to other people's lists).
@@ -410,6 +405,11 @@ begin
   assert ok, 'an unknown section must be rejected';
 end $$;
 
+-- ============================================================================
+-- anon (not signed in, only holds the public anon key)
+-- Recipes are meant for signed-in users only ("Logg inn for å se oppskriftene"),
+-- so anon must see nothing. If this fails, public recipes are readable by anyone.
+-- ============================================================================
 reset role;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 set local role anon;
