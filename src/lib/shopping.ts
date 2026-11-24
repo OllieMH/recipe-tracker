@@ -7,7 +7,18 @@ import { supabase } from './supabase'
 import { overrideKey } from './aisle-overrides'
 import type { Database } from '@/types/database'
 import type { Food } from './foods'
-import type { MergeItem, RowUpdate } from './shopping-merge'
+import type { MergeItem } from './shopping-merge'
+import {
+  MUTATION,
+  itemsKey,
+  scopeOf,
+  type ClearCheckedVars,
+  type DeleteItemsVars,
+  type EditRowsVars,
+  type RowEdit,
+  type SetAisleVars,
+  type SetCheckedVars,
+} from './shopping-mutations'
 
 type Tables = Database['public']['Tables']
 export type ShoppingList = Tables['shopping_lists']['Row']
@@ -24,8 +35,6 @@ function toItem(row: Tables['shopping_list_items']['Row']): ShoppingItem {
     orig_amount_max: num(row.orig_amount_max),
   }
 }
-
-const itemsKey = (listId: string) => ['shopping', 'items', listId] as const
 
 // ---------- lists ----------
 
@@ -44,21 +53,26 @@ export function useShoppingLists() {
 }
 
 /** list id -> how many items and how many are still open. */
+// Query data is saved on the phone as JSON, which cannot hold a Map: the queries
+// below store plain data and build the Map in `select` (module-level, so stable).
+type Counts = Record<string, { total: number; open: number }>
+const countsToMap = (counts: Counts): Map<string, { total: number; open: number }> => new Map(Object.entries(counts))
+
 export function useListCounts() {
   return useQuery({
     queryKey: ['shopping', 'counts'],
-    queryFn: async () => {
+    queryFn: async (): Promise<Counts> => {
       const { data, error } = await supabase.from('shopping_list_items').select('list_id, checked')
       if (error) throw error
-      const map = new Map<string, { total: number; open: number }>()
+      const counts: Counts = {}
       for (const r of data) {
-        const c = map.get(r.list_id) ?? { total: 0, open: 0 }
+        const c = (counts[r.list_id] ??= { total: 0, open: 0 })
         c.total += 1
         if (!r.checked) c.open += 1
-        map.set(r.list_id, c)
       }
-      return map
+      return counts
     },
+    select: countsToMap,
   })
 }
 
@@ -297,112 +311,43 @@ export function useAddRecipeToList() {
   })
 }
 
-/**
- * A mutation on the items of one list that updates the cache straight away
- * (poor signal in a shop should not make ticking feel slow) and rolls back on error.
- */
-function useOptimisticItems<V>(
-  listId: string,
-  run: (v: V) => Promise<void>,
-  patch: (items: ShoppingItem[], v: V) => ShoppingItem[],
-) {
-  const qc = useQueryClient()
-  const key = itemsKey(listId)
-  return useMutation({
-    mutationFn: run,
-    onMutate: async (v: V) => {
-      await qc.cancelQueries({ queryKey: key })
-      const prev = qc.getQueryData<ShoppingItem[]>(key)
-      qc.setQueryData<ShoppingItem[]>(key, (old) => (old ? patch(old, v) : old))
-      return { prev }
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(key, ctx.prev)
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key })
-      void qc.invalidateQueries({ queryKey: ['shopping', 'counts'] })
-    },
-  })
-}
+// The edits below work offline: see shopping-mutations.ts. The hooks only give each
+// call the list id; the function that sends it is registered once at start-up.
+
+export type { RowEdit } from './shopping-mutations'
 
 export function useSetChecked(listId: string) {
-  return useOptimisticItems<{ ids: number[]; checked: boolean }>(
-    listId,
-    async ({ ids, checked }) => {
-      const { error } = await supabase.from('shopping_list_items').update({ checked }).in('id', ids)
-      if (error) throw error
-    },
-    (items, { ids, checked }) => items.map((i) => (ids.includes(i.id) ? { ...i, checked } : i)),
-  )
+  const m = useMutation<void, unknown, SetCheckedVars>({ mutationKey: MUTATION.setChecked, scope: scopeOf(listId) })
+  return { ...m, mutate: (v: Omit<SetCheckedVars, 'listId'>) => m.mutate({ listId, ...v }) }
 }
 
 /** Move items to another store section (the food database does not know every product). */
 export function useSetAisle(listId: string) {
-  return useOptimisticItems<{ ids: number[]; aisle: string }>(
-    listId,
-    async ({ ids, aisle }) => {
-      const { error } = await supabase.from('shopping_list_items').update({ aisle }).in('id', ids)
-      if (error) throw error
-    },
-    (items, { ids, aisle }) => items.map((i) => (ids.includes(i.id) ? { ...i, aisle } : i)),
-  )
+  const m = useMutation<void, unknown, SetAisleVars>({ mutationKey: MUTATION.setAisle, scope: scopeOf(listId) })
+  return { ...m, mutate: (v: Omit<SetAisleVars, 'listId'>) => m.mutate({ listId, ...v }) }
 }
 
 export function useDeleteItems(listId: string) {
-  return useOptimisticItems<number[]>(
-    listId,
-    async (ids) => {
-      const { error } = await supabase.from('shopping_list_items').delete().in('id', ids)
-      if (error) throw error
-    },
-    (items, ids) => items.filter((i) => !ids.includes(i.id)),
-  )
+  const m = useMutation<void, unknown, DeleteItemsVars>({ mutationKey: MUTATION.deleteItems, scope: scopeOf(listId) })
+  return { ...m, mutate: (ids: number[]) => m.mutate({ listId, ids }) }
 }
 
 export function useClearChecked(listId: string) {
-  return useOptimisticItems<void>(
-    listId,
-    async () => {
-      const { error } = await supabase.from('shopping_list_items').delete().eq('list_id', listId).eq('checked', true)
-      if (error) throw error
-    },
-    (items) => items.filter((i) => !i.checked),
-  )
-}
-
-export interface RowEdit {
-  /** Each update rewrites one row (conversion, merge, undo, new amount or unit). */
-  updates: RowUpdate[]
-  /** Rows a decrease used up. */
-  deleteIds?: number[]
+  const m = useMutation<void, unknown, ClearCheckedVars>({ mutationKey: MUTATION.clearChecked, scope: scopeOf(listId) })
+  return { ...m, mutate: () => m.mutate({ listId }) }
 }
 
 /** Amount and unit edits: updates and deletes in one optimistic step. */
 export function useEditRows(listId: string) {
-  return useOptimisticItems<RowEdit>(
-    listId,
-    async ({ updates, deleteIds = [] }) => {
-      const results = await Promise.all([
-        ...updates.map(({ id, ...fields }) => supabase.from('shopping_list_items').update(fields).eq('id', id)),
-        ...(deleteIds.length > 0 ? [supabase.from('shopping_list_items').delete().in('id', deleteIds)] : []),
-      ])
-      const failed = results.find((r) => r.error)
-      if (failed?.error) throw failed.error
-    },
-    (items, { updates, deleteIds = [] }) =>
-      items
-        .filter((i) => !deleteIds.includes(i.id))
-        .map((i) => {
-          const u = updates.find((x) => x.id === i.id)
-          return u ? { ...i, ...u } : i
-        }),
-  )
+  const m = useMutation<void, unknown, EditRowsVars>({ mutationKey: MUTATION.editRows, scope: scopeOf(listId) })
+  return { ...m, mutate: (v: RowEdit) => m.mutate({ listId, ...v }) }
 }
 
 // ---------- aisles ----------
 
 /** foods.category -> store aisle (77 rows, static). */
+const aisleRowsToMap = (rows: { category: string; aisle: string }[]) => new Map(rows.map((r) => [r.category, r.aisle]))
+
 export function useAisleMap() {
   return useQuery({
     queryKey: ['aisle-map'],
@@ -410,21 +355,26 @@ export function useAisleMap() {
     queryFn: async () => {
       const { data, error } = await supabase.from('aisle_map').select('category, aisle')
       if (error) throw error
-      return new Map(data.map((r) => [r.category, r.aisle]))
+      return data
     },
+    select: aisleRowsToMap,
   })
 }
 
 /** Shared corrections ("sitronsaft" -> Krydder og saus). Small table, refreshed now and then. */
+const overrideRowsToMap = (rows: { name_key: string; aisle: string }[]): Map<string, string> =>
+  new Map(rows.map((r) => [r.name_key, r.aisle]))
+
 export function useAisleOverrides() {
   return useQuery({
     queryKey: ['aisle-overrides'],
     staleTime: 5 * 60 * 1000,
-    queryFn: async (): Promise<Map<string, string>> => {
+    queryFn: async () => {
       const { data, error } = await supabase.from('aisle_overrides').select('name_key, aisle')
       if (error) throw error
-      return new Map(data.map((r) => [r.name_key, r.aisle]))
+      return data
     },
+    select: overrideRowsToMap,
   })
 }
 

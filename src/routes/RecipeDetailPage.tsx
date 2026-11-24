@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth, useIsAdmin } from '@/lib/auth'
 import { useFoods } from '@/lib/foods'
+import { useIsOnline } from '@/lib/offline'
 import { copyRecipe } from '@/lib/recipe-draft'
 import {
   formatMinutes, useFavorites, useMeasures, useMyCopyOf, useParent, useRecipe, useToggleFavorite,
@@ -114,6 +115,7 @@ export default function RecipeDetailPage() {
   const foods = useFoods()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const online = useIsOnline()
   const [showFix, setShowFix] = useState(false)
   const [showList, setShowList] = useState(false)
   const [addedTo, setAddedTo] = useState<{ id: string; name: string } | null>(null)
@@ -270,7 +272,13 @@ export default function RecipeDetailPage() {
               {copying ? 'Lager kopi …' : 'Lag min versjon'}
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => { setAddedTo(null); setShowList(true) }}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!online}
+            title={online ? undefined : 'Krever nett'}
+            onClick={() => { setAddedTo(null); setShowList(true) }}
+          >
             <ShoppingBasket aria-hidden />
             Legg til i handleliste
           </Button>

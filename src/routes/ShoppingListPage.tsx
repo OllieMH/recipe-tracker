@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, BookOpen, Pencil, Plus, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { overrideFor } from '@/lib/aisle-overrides'
+import { useIsOnline } from '@/lib/offline'
 import { autoMatchFood, useFoods } from '@/lib/foods'
 import { useMeasures } from '@/lib/recipes'
 import { parseQuickAdd } from '@/lib/quick-add'
@@ -94,6 +95,7 @@ export default function ShoppingListPage() {
   const editRows = useEditRows(id)
   const rename = useRenameList(id)
   const deleteList = useDeleteList(id)
+  const online = useIsOnline()
 
   const [text, setText] = useState('')
   const [renaming, setRenaming] = useState(false)
@@ -133,6 +135,14 @@ export default function ShoppingListPage() {
   const mutationError = [addItem, setChecked, setAisle, deleteItems, clearChecked, editRows, rename, deleteList].find((m) => m.isError)
 
   if (list.isLoading) return <main className="p-4 text-sm text-muted-foreground">Laster …</main>
+  if (!list.data && list.fetchStatus === 'paused') {
+    return (
+      <main className="mx-auto max-w-3xl space-y-3 p-4">
+        <p>Du er frakoblet, og denne listen er ikke lagret på telefonen ennå.</p>
+        <Link to="/handleliste" className="text-sm underline">Til handlelistene</Link>
+      </main>
+    )
+  }
   if (!list.data) {
     return (
       <main className="mx-auto max-w-3xl space-y-3 p-4">
@@ -225,7 +235,7 @@ export default function ShoppingListPage() {
         ) : (
           <div className="flex items-start gap-2">
             <h1 className="min-w-0 flex-1 break-words text-3xl font-extrabold tracking-tight">{list.data.name}</h1>
-            {isOwner && (
+            {isOwner && online && (
               <button
                 type="button"
                 aria-label="Gi listen nytt navn"
@@ -258,13 +268,29 @@ export default function ShoppingListPage() {
           maxLength={200}
           onChange={(e) => setText(e.target.value)}
         />
-        <Button type="submit" disabled={addItem.isPending || !text.trim()} aria-label="Legg til">
+        <Button
+          type="submit"
+          disabled={!online || addItem.isPending || !text.trim()}
+          aria-label="Legg til"
+          title={online ? undefined : 'Krever nett'}
+        >
           <Plus className="size-4" /> Legg til
         </Button>
       </form>
+      {!online && (
+        <p className="text-sm text-muted-foreground">
+          Nye varer kan ikke legges til uten nett ennå. Du kan fortsatt huke av og endre det som står på listen.
+        </p>
+      )}
 
       <div>
-        <Button variant="outline" size="sm" onClick={() => setPickingRecipe(true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!online}
+          title={online ? undefined : 'Krever nett'}
+          onClick={() => setPickingRecipe(true)}
+        >
           <BookOpen aria-hidden /> Legg til oppskrift
         </Button>
       </div>
@@ -352,7 +378,7 @@ export default function ShoppingListPage() {
               <Button
                 variant="destructive"
                 size="sm"
-                disabled={deleteList.isPending}
+                disabled={!online || deleteList.isPending}
                 onClick={() => deleteList.mutate(undefined, { onSuccess: () => navigate('/handleliste', { replace: true }) })}
               >
                 Ja, slett
@@ -360,7 +386,14 @@ export default function ShoppingListPage() {
               <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>Avbryt</Button>
             </div>
           ) : (
-            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmDelete(true)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive"
+              disabled={!online}
+              title={online ? undefined : 'Krever nett'}
+              onClick={() => setConfirmDelete(true)}
+            >
               Slett liste
             </Button>
           )}

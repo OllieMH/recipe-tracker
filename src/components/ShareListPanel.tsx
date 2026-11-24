@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Users } from 'lucide-react'
 import { useLeaveList, useListMembers, useRemoveMember, useShareList } from '@/lib/shopping'
+import { useIsOnline } from '@/lib/offline'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -24,6 +25,7 @@ export default function ShareListPanel({ listId, isOwner, userId, onLeft }: Prop
   const share = useShareList(listId)
   const remove = useRemoveMember(listId)
   const leave = useLeaveList(listId)
+  const online = useIsOnline()
   const [email, setEmail] = useState('')
   const [sharedWith, setSharedWith] = useState<string | null>(null)
   const [confirmLeave, setConfirmLeave] = useState(false)
@@ -68,7 +70,7 @@ export default function ShareListPanel({ listId, isOwner, userId, onLeft }: Prop
                   variant="ghost"
                   size="sm"
                   className="text-destructive"
-                  disabled={remove.isPending}
+                  disabled={!online || remove.isPending}
                   aria-label={`Fjern ${m.label} fra listen`}
                   onClick={() => remove.mutate(m.user_id)}
                 >
@@ -90,7 +92,9 @@ export default function ShareListPanel({ listId, isOwner, userId, onLeft }: Prop
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-              <Button type="submit" disabled={share.isPending || !email.trim()}>Del</Button>
+              <Button type="submit" disabled={!online || share.isPending || !email.trim()} title={online ? undefined : 'Krever nett'}>
+                Del
+              </Button>
             </div>
             {share.isError && <p role="alert" className="text-destructive">{shareError(share.error)}</p>}
             {sharedWith && <p role="status" className="text-muted-foreground">Delt med {sharedWith}.</p>}
@@ -105,7 +109,7 @@ export default function ShareListPanel({ listId, isOwner, userId, onLeft }: Prop
                 <Button
                   variant="destructive"
                   size="sm"
-                  disabled={leave.isPending}
+                  disabled={!online || leave.isPending}
                   onClick={() => leave.mutate(userId, { onSuccess: onLeft })}
                 >
                   Ja, forlat
@@ -113,7 +117,14 @@ export default function ShareListPanel({ listId, isOwner, userId, onLeft }: Prop
                 <Button variant="outline" size="sm" onClick={() => setConfirmLeave(false)}>Avbryt</Button>
               </div>
             ) : (
-              <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmLeave(true)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive"
+                disabled={!online}
+                title={online ? undefined : 'Krever nett'}
+                onClick={() => setConfirmLeave(true)}
+              >
                 Forlat listen
               </Button>
             )}

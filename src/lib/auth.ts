@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import { readStoredUser } from './offline'
 
 export interface AuthState {
   user: User | null
@@ -27,13 +28,20 @@ export function useAuthState(): AuthState {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
-      setUser(data.session?.user ?? null)
+      // With an expired access token and no network, supabase-js reports "no session" but
+      // keeps the saved login and refreshes it when the network is back (TOKEN_REFRESHED
+      // below then takes over). Trust the saved login so an offline user is not sent to
+      // the login page; a real sign-out clears it, and then this finds nothing.
+      setUser(data.session?.user ?? readStoredUser())
       setLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
-      setUser(session?.user ?? null)
+      if (session) setUser(session.user)
+      // Only a real sign-out logs out. Other events without a session (INITIAL_SESSION when
+      // the token could not be refreshed offline) keep the saved login, see above.
+      else setUser(event === 'SIGNED_OUT' ? null : readStoredUser())
     })
 
     return () => subscription.unsubscribe()
@@ -50,7 +58,11 @@ export async function signIn(email: string, password: string) {
 
 export async function signOut() {
   const { error } = await supabase.auth.signOut()
-  if (error) throw error
+  if (error) {
+    // Offline the server cannot be told about it, so sign out on this device only.
+    const local = await supabase.auth.signOut({ scope: 'local' })
+    if (local.error) throw local.error
+  }
 }
 
 /** Send a password-reset email. The link lands on /sett-passord. */

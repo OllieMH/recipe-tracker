@@ -1,6 +1,7 @@
 import { NavLink, Link, Outlet } from 'react-router-dom'
 import { signOut, useAuth, useIsAdmin } from '@/lib/auth'
 import { cn } from '@/lib/utils'
+import OfflineBanner from '@/components/OfflineBanner'
 
 const navLink = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -37,6 +38,7 @@ export default function AppLayout() {
           </button>
         </nav>
       </header>
+      <OfflineBanner />
       <Outlet />
     </div>
   )

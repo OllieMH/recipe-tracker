@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useCreateList, useListCounts, useShoppingLists } from '@/lib/shopping'
+import { useIsOnline } from '@/lib/offline'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -12,6 +13,7 @@ export default function ShoppingListsPage() {
   const lists = useShoppingLists()
   const counts = useListCounts()
   const create = useCreateList()
+  const online = useIsOnline()
   const [name, setName] = useState('')
 
   function onCreate(e: FormEvent) {
@@ -38,13 +40,19 @@ export default function ShoppingListsPage() {
           maxLength={80}
           onChange={(e) => setName(e.target.value)}
         />
-        <Button type="submit" disabled={create.isPending || !name.trim()}>
+        <Button type="submit" disabled={!online || create.isPending || !name.trim()} title={online ? undefined : 'Krever nett'}>
           Opprett
         </Button>
       </form>
+      {!online && <p className="text-sm text-muted-foreground">Du må ha nett for å lage en ny liste.</p>}
       {create.isError && <p role="alert" className="text-sm text-destructive">Kunne ikke opprette listen. Prøv igjen.</p>}
 
       {lists.isLoading && <p className="text-sm text-muted-foreground">Laster …</p>}
+      {!lists.data && lists.fetchStatus === 'paused' && (
+        <p className="text-sm text-muted-foreground">
+          Ingen nett, og ingen lister er lagret på telefonen ennå. Åpne appen med nett én gang først.
+        </p>
+      )}
       {lists.isError && <p role="alert" className="text-sm text-destructive">Kunne ikke hente listene.</p>}
 
       {lists.data && lists.data.length === 0 && (

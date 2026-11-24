@@ -165,13 +165,17 @@ export async function fetchMeasures(foodIds: number[]): Promise<Map<number, Meas
   return map
 }
 
+// Saved on the phone as JSON, so the query stores [id, measures] pairs and the Map is built in `select`.
+const pairsToMap = (pairs: [number, Measures][]): Map<number, Measures> => new Map(pairs)
+
 export function useMeasures(foodIds: number[]) {
   const ids = [...new Set(foodIds)].sort((a, b) => a - b)
   return useQuery({
     queryKey: ['measures', ids],
     enabled: ids.length > 0,
     staleTime: Infinity,
-    queryFn: () => fetchMeasures(ids),
+    queryFn: async () => [...(await fetchMeasures(ids)).entries()],
+    select: pairsToMap,
   })
 }
 
