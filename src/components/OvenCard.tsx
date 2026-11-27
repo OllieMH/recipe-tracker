@@ -20,7 +20,7 @@ export default function OvenCard({ steps }: { steps: OvenStep[] }) {
               <div className="space-y-0.5">
                 <p className="font-semibold">
                   {steps.length > 1 && <span className="text-muted-foreground">{i + 1}. </span>}
-                  {s.mode ? OVEN_MODE_LABELS[s.mode] : 'Varme ikke oppgitt'}
+                  {s.mode ? OVEN_MODE_LABELS[s.mode] : 'Ovnsprogram ikke oppgitt'}
                 </p>
                 {(time || s.rack) && (
                   <p className="flex flex-wrap items-center gap-x-3 text-sm">

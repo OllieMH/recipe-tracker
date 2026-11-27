@@ -35,7 +35,7 @@ export default function OvenFields({ rows, onChange }: Props) {
                   onChange={(e) => update(i, { temp_c: e.target.value })} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={id('mode')}>Varme</Label>
+                <Label htmlFor={id('mode')}>Ovnsprogram</Label>
                 <Select id={id('mode')} value={o.mode ?? ''}
                   onChange={(e) => update(i, { mode: (e.target.value || null) as DraftOven['mode'] })}>
                   <option value="">Ikke oppgitt</option>
