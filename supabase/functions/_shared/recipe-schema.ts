@@ -1,5 +1,6 @@
 // Shared by Edge Functions and (from M5) the client. Imports only 'zod'.
 import { z } from 'zod'
+import { AISLES } from './aisles.ts'
 
 export const CANONICAL_UNITS = [
   'g', 'kg', 'ml', 'dl', 'l', 'ts', 'ss', 'krm', 'stk', 'fedd',
@@ -19,6 +20,8 @@ export const IngredientSchema = z.object({
   note: z.string().nullable(),
   scalable: z.boolean(),
   food_match: z.string().nullable(),
+  /** Store section, for the shopping list. Null when unsure. */
+  aisle: z.enum(AISLES).nullable(),
 })
 
 export const OVEN_MODES = [

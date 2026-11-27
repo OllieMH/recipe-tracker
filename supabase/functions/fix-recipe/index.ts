@@ -67,6 +67,7 @@ Deno.serve(async (req) => {
             note: i.note,
             scalable: i.scalable,
             food_match: null,
+            aisle: (i.aisle ?? null) as Recipe['ingredient_groups'][number]['ingredients'][number]['aisle'],
           })),
       })),
     steps: [...r.steps]

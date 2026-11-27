@@ -11,6 +11,7 @@
 // Conversions come from src/lib/conversion.ts and only happen when they are
 // exact (fixed volume/weight relations) or the food has a measured value.
 
+import { AISLES } from './aisle-list'
 import { ML_PER_UNIT, G_PER_UNIT, fromGrams, isVolume, isWeight, toGrams, type Measures } from './conversion'
 
 /** The columns of a shopping_list_items row this module needs. */
@@ -447,24 +448,18 @@ export function formatLineAmount(line: Pick<ShoppingLine, 'amount' | 'amountMax'
   return line.unit ? `${text} ${line.unit}` : text
 }
 
-/** Aisles in shopping order; unknown aisles sort before "Annet". */
-export const AISLE_ORDER = [
-  'Frukt og grønt',
-  'Brød og bakevarer',
-  'Kjøtt og fisk',
-  'Meieri og egg',
-  'Frysevarer og ferdigmat',
-  'Tørrvarer',
-  'Krydder og saus',
-  'Drikke',
-  'Snacks og søtt',
-  'Annet',
-]
+/** Sections in the default shopping order (see aisles.ts). */
+export const AISLE_ORDER: readonly string[] = AISLES
 
-export function groupByAisle<T extends { aisle: string }>(lines: readonly T[]): { aisle: string; lines: T[] }[] {
+/** Lines grouped by section, in `order` (a list's own order); unknown sections sort just before "Annet". */
+export function groupByAisle<T extends { aisle: string }>(
+  lines: readonly T[],
+  order: readonly string[] = AISLE_ORDER,
+): { aisle: string; lines: T[] }[] {
   const rank = (a: string) => {
-    const i = AISLE_ORDER.indexOf(a)
-    return i === -1 ? AISLE_ORDER.length - 1.5 : i // unknown aisles sort just before "Annet"
+    if (a === 'Annet') return order.length + 1
+    const i = order.indexOf(a)
+    return i === -1 ? order.length : i
   }
   const groups = new Map<string, T[]>()
   for (const l of lines) {

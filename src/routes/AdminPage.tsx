@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import AdminSuggestions from '@/components/AdminSuggestions'
+import AdminMoves from '@/components/AdminMoves'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const emailSchema = z.email('Skriv inn en gyldig e-postadresse.')
@@ -116,6 +117,8 @@ export default function AdminPage() {
       </section>
 
       <AdminSuggestions />
+
+      <AdminMoves />
     </main>
   )
 }

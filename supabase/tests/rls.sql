@@ -495,6 +495,98 @@ begin
   assert n = 0, 'a suggestion the admin has handled must not be deleted by its sender';
 end $$;
 
+-- store sections (needs the 20261128000001_store_sections migration)
+-- alice owns a list shared with bob; carol is an outsider (and admin).
+select set_config('request.jwt.claims',
+  '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated"}', true);
+do $$
+declare lid uuid; ok boolean;
+begin
+  lid := public.create_list('Butikk');
+  perform set_config('test.sec_list', lid::text, true);
+  perform public.share_list(lid, 'bob@test.invalid');
+
+  perform public.set_list_aisle_order(lid, array['Kjøtt og fisk', 'Frukt og grønt']);
+  assert (select aisle_order[1] from public.shopping_lists where id = lid) = 'Kjøtt og fisk', 'owner sets the order';
+
+  ok := false;
+  begin perform public.set_list_aisle_order(lid, array['Finnes ikke']);
+  exception when invalid_parameter_value then ok := true; end;
+  assert ok, 'an unknown section in the order must be rejected';
+  ok := false;
+  begin perform public.set_list_aisle_order(lid, array['Brød', 'Brød']);
+  exception when invalid_parameter_value then ok := true; end;
+  assert ok, 'a section twice in the order must be rejected';
+
+  insert into public.shopping_list_aisle_overrides (list_id, name_key, aisle) values (lid, 'mel', 'Fri for');
+
+  -- shared moves: never "Fri for", only known sections, remembers where from
+  ok := false;
+  begin perform public.set_aisle_override('mel', 'Fri for', 'Bakevarer');
+  exception when invalid_parameter_value then ok := true; end;
+  assert ok, 'Fri for must not be shared with everyone';
+  ok := false;
+  begin perform public.set_aisle_override('mel', 'Tørrvarer', null);
+  exception when invalid_parameter_value then ok := true; end;
+  assert ok, 'an old or unknown section must be rejected';
+  perform public.set_aisle_override('testvare', 'Drikke', 'Annet');
+  assert (select previous_aisle from public.aisle_overrides where name_key = 'testvare') = 'Annet',
+    'a shared move must remember where it came from';
+
+  ok := false;
+  begin perform public.admin_list_aisle_overrides();
+  exception when insufficient_privilege then ok := true; end;
+  assert ok, 'admin_list_aisle_overrides is for admins only';
+end $$;
+
+-- bob is a member: may change the order and the list's own sections, not undo shared moves
+select set_config('request.jwt.claims',
+  '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}', true);
+do $$
+declare lid uuid := current_setting('test.sec_list')::uuid; n int;
+begin
+  perform public.set_list_aisle_order(lid, null);
+  assert (select aisle_order from public.shopping_lists where id = lid) is null, 'a member may reset the order';
+  select count(*) into n from public.shopping_list_aisle_overrides where list_id = lid;
+  assert n = 1, 'a member must see the list''s own sections';
+  -- the app's upsert (PostgREST writes every column on conflict)
+  insert into public.shopping_list_aisle_overrides as o (list_id, name_key, aisle) values (lid, 'mel', 'Bakevarer')
+    on conflict (list_id, name_key) do update
+    set list_id = excluded.list_id, name_key = excluded.name_key, aisle = excluded.aisle;
+  assert (select aisle from public.shopping_list_aisle_overrides where list_id = lid and name_key = 'mel') = 'Bakevarer',
+    'a member may change the list''s own section with an upsert';
+  delete from public.shopping_list_aisle_overrides where list_id = lid and name_key = 'mel';
+  get diagnostics n = row_count;
+  assert n = 1, 'a member may remove the list''s own section';
+  delete from public.aisle_overrides where name_key = 'testvare';
+  get diagnostics n = row_count;
+  assert n = 0, 'a regular user must not undo shared moves';
+end $$;
+
+-- carol is not a member: nothing on alice's list; but as admin may list and undo shared moves
+select set_config('request.jwt.claims',
+  '{"sub":"cccccccc-0000-0000-0000-000000000003","role":"authenticated"}', true);
+do $$
+declare lid uuid := current_setting('test.sec_list')::uuid; n int; ok boolean;
+begin
+  ok := false;
+  begin perform public.set_list_aisle_order(lid, array['Brød']);
+  exception when insufficient_privilege then ok := true; end;
+  assert ok, 'a non-member must not change the order';
+  ok := false;
+  begin insert into public.shopping_list_aisle_overrides (list_id, name_key, aisle) values (lid, 'x', 'Brød');
+  exception when insufficient_privilege then ok := true; end;
+  assert ok, 'a non-member must not add list sections';
+  select count(*) into n from public.shopping_list_aisle_overrides where list_id = lid;
+  assert n = 0, 'a non-member must not see list sections';
+
+  select count(*) into n from public.admin_list_aisle_overrides() where name_key = 'testvare';
+  assert n = 1, 'admin must see shared moves';
+  delete from public.aisle_overrides where name_key = 'testvare';
+  get diagnostics n = row_count;
+  assert n = 1, 'admin must be able to undo a shared move';
+end $$;
+
 -- ============================================================================
 -- anon (not signed in, only holds the public anon key)
 -- Recipes are meant for signed-in users only ("Logg inn for å se oppskriftene"),
@@ -559,6 +651,14 @@ begin
   begin
     select count(*) into n from public.suggestions;
     raise exception 'anon read suggestions';
+  exception when insufficient_privilege then null; end;
+  begin
+    select count(*) into n from public.shopping_list_aisle_overrides;
+    raise exception 'anon read shopping_list_aisle_overrides';
+  exception when insufficient_privilege then null; end;
+  begin
+    select count(*) into n from public.aisles;
+    raise exception 'anon read aisles';
   exception when insufficient_privilege then null; end;
 end $$;
 

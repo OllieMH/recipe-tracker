@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import { overrideKey } from './aisle-overrides'
 import type { Database } from '@/types/database'
-import type { Food } from './foods'
+import type { MoveMemory } from './aisles'
 import type { MergeItem } from './shopping-merge'
 import {
   MUTATION,
@@ -80,7 +80,7 @@ export function useListCounts() {
 export function useShoppingList(id: string | undefined) {
   const qc = useQueryClient()
   const listsKey = ['shopping', 'lists']
-  type ListRow = { id: string; name: string; owner_id: string; created_at: string }
+  type ListRow = { id: string; name: string; owner_id: string; created_at: string; aisle_order?: string[] | null }
   return useQuery({
     queryKey: ['shopping', 'list', id],
     enabled: !!id,
@@ -91,7 +91,7 @@ export function useShoppingList(id: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('shopping_lists')
-        .select('id, name, owner_id, created_at')
+        .select('id, name, owner_id, created_at, aisle_order')
         .eq('id', id!)
         .maybeSingle()
       if (error) throw error
@@ -352,12 +352,12 @@ export function useEditRows(listId: string) {
 
 // ---------- aisles ----------
 
-/** foods.category -> store aisle (77 rows, static). */
+/** foods.category -> store section (static). "v2": the sections were renamed in Nov 2026. */
 const aisleRowsToMap = (rows: { category: string; aisle: string }[]) => new Map(rows.map((r) => [r.category, r.aisle]))
 
 export function useAisleMap() {
   return useQuery({
-    queryKey: ['aisle-map'],
+    queryKey: ['aisle-map', 'v2'],
     staleTime: Infinity,
     queryFn: async () => {
       const { data, error } = await supabase.from('aisle_map').select('category, aisle')
@@ -368,7 +368,7 @@ export function useAisleMap() {
   })
 }
 
-/** Shared corrections ("sitronsaft" -> Krydder og saus). Small table, refreshed now and then. */
+/** Shared moves ("sitronsaft" -> Frukt og grønt). Small table, refreshed now and then. */
 const overrideRowsToMap = (rows: { name_key: string; aisle: string }[]): Map<string, string> =>
   new Map(rows.map((r) => [r.name_key, r.aisle]))
 
@@ -385,18 +385,97 @@ export function useAisleOverrides() {
   })
 }
 
-/** Save a correction for everyone. Failing to save is not worth bothering the user about. */
-export function useSetAisleOverride() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async ({ name, aisle }: { name: string; aisle: string }) => {
-      const { error } = await supabase.rpc('set_aisle_override', { p_key: overrideKey(name), p_aisle: aisle })
+const listOverridesKey = (listId: string) => ['shopping', 'aisle-overrides', listId] as const
+
+/** This list's own sections for names (moves to and from "Fri for"). */
+export function useListAisleOverrides(listId: string | undefined) {
+  return useQuery({
+    queryKey: listOverridesKey(listId ?? ''),
+    enabled: !!listId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('shopping_list_aisle_overrides')
+        .select('name_key, aisle')
+        .eq('list_id', listId!)
       if (error) throw error
+      return data
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['aisle-overrides'] }),
+    select: overrideRowsToMap,
   })
 }
 
-export function aisleFor(food: Pick<Food, 'category'> | null | undefined, map: Map<string, string> | undefined): string {
-  return (food?.category && map?.get(food.category)) || 'Annet'
+/**
+ * Remember a move for next time: shared with everyone, or for this list only
+ * (see rememberMove in aisles.ts). Failing to save is not worth bothering the user about.
+ */
+export function useRememberMove(listId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ name, from, memory }: { name: string; from: string; memory: MoveMemory }) => {
+      const key = overrideKey(name)
+      if (memory.scope === 'shared') {
+        const { error } = await supabase.rpc('set_aisle_override', { p_key: key, p_aisle: memory.aisle, p_from: from })
+        if (error) throw error
+      } else if (memory.scope === 'list') {
+        const { error } = await supabase
+          .from('shopping_list_aisle_overrides')
+          .upsert({ list_id: listId, name_key: key, aisle: memory.aisle })
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('shopping_list_aisle_overrides')
+          .delete()
+          .eq('list_id', listId)
+          .eq('name_key', key)
+        if (error) throw error
+      }
+    },
+    onSuccess: (_d, { memory }) =>
+      qc.invalidateQueries({ queryKey: memory.scope === 'shared' ? ['aisle-overrides'] : listOverridesKey(listId) }),
+  })
+}
+
+/** Save a list's own section order (null = back to the default). Needs a connection. */
+export function useSetListAisleOrder(listId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (order: string[] | null) => {
+      // the generated type says string[]; null is allowed and resets the order
+      const { error } = await supabase.rpc('set_list_aisle_order', { p_list_id: listId, p_order: order as string[] })
+      if (error) throw error
+    },
+    onMutate: (order) => {
+      qc.setQueryData(['shopping', 'list', listId], (old: object | undefined) => (old ? { ...old, aisle_order: order } : old))
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['shopping', 'list', listId] }),
+  })
+}
+
+// ---------- admin: shared moves ----------
+
+export function useSharedMoves(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'aisle-overrides'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('admin_list_aisle_overrides')
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+/** Undo a shared move: the name goes back to its automatic section for new items. */
+export function useUndoSharedMove() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (nameKey: string) => {
+      const { error } = await supabase.from('aisle_overrides').delete().eq('name_key', nameKey)
+      if (error) throw error
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['admin', 'aisle-overrides'] })
+      void qc.invalidateQueries({ queryKey: ['aisle-overrides'] })
+    },
+  })
 }

@@ -21,6 +21,8 @@ export interface ListableIngredient {
   unit: string | null
   scalable: boolean
   food_id: number | null
+  /** Section Gemini chose on import, if any. */
+  aisle?: string | null
 }
 
 export interface ListableRecipe {
@@ -43,8 +45,8 @@ export function recipeToListItems(
     factor: number
     unitMode: UnitMode
     measuresByFood: ReadonlyMap<number, Measures> | undefined
-    /** Store aisle for an ingredient (by food id, or by name when the user has corrected it before). */
-    aisleOf: (foodId: number | null, name: string) => string
+    /** Store section for an ingredient (see chooseAisle in aisles.ts). */
+    aisleOf: (ing: ListableIngredient) => string
     /** foods.category for a food id, used to decide between volume and weight. */
     categoryOf: (foodId: number | null) => string | null
   },
@@ -68,7 +70,7 @@ export function recipeToListItems(
           amount_max: shown.amountMax,
           unit: shown.unit,
           food_id: ing.food_id,
-          aisle: opts.aisleOf(ing.food_id, ing.name),
+          aisle: opts.aisleOf(ing),
           recipe_id: recipe.id,
           recipe_title: recipe.title,
         },

@@ -18,6 +18,8 @@ export interface DraftIngredient {
   note: string
   scalable: boolean
   food_id: number | null
+  /** Store section Gemini chose on import; kept as is, not edited in the form. */
+  aisle: string | null
 }
 
 export interface DraftGroup {
@@ -85,7 +87,7 @@ export function emptyIngredient(): DraftIngredient {
   return {
     key: newKey(), original_text: '', amount: '', amount_max: '', unit: '',
     original_amount: null, original_unit: null, name: '', note: '',
-    scalable: true, food_id: null,
+    scalable: true, food_id: null, aisle: null,
   }
 }
 
@@ -179,6 +181,7 @@ export function draftFromLlm(
         note: i.note ?? '',
         scalable: i.scalable,
         food_id: autoMatchFood(opts.foods, i.food_match, i.name)?.id ?? null,
+        aisle: i.aisle ?? null,
       })),
     })),
     steps: r.steps.map((s) => ({ key: newKey(), group_name: s.group_name ?? '', text: s.text })),
@@ -221,6 +224,7 @@ export function draftFromRecipe(r: RecipeDetail): DraftRecipe {
         note: i.note ?? '',
         scalable: i.scalable,
         food_id: i.food_id,
+        aisle: i.aisle ?? null,
       })),
     })),
     steps: r.steps.map((st) => ({ key: newKey(), group_name: st.group_name ?? '', text: st.text })),
@@ -298,6 +302,7 @@ export function draftToPayload(d: DraftRecipe) {
           original_text: i.original_text || i.name.trim(),
           original_amount: i.original_amount,
           original_unit: i.original_unit,
+          aisle: i.aisle,
         })),
       })),
     steps: d.steps.map((s) => ({ group_name: s.group_name.trim() || null, text: s.text.trim() })),

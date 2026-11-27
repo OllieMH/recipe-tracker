@@ -1,14 +1,13 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Pencil, Plus, X } from 'lucide-react'
+import { ArrowDownUp, ArrowLeft, BookOpen, Pencil, Plus, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
-import { overrideFor } from '@/lib/aisle-overrides'
+import { automaticAisle, chooseAisle, effectiveOrder, rememberMove, type Aisle } from '@/lib/aisles'
 import { useIsOnline } from '@/lib/offline'
 import { autoMatchFood, useFoods } from '@/lib/foods'
 import { useMeasures } from '@/lib/recipes'
 import { parseQuickAdd } from '@/lib/quick-add'
 import {
-  aisleFor,
   useAddItem,
   useAisleMap,
   useAisleOverrides,
@@ -16,12 +15,14 @@ import {
   useDeleteItems,
   useDeleteList,
   useEditRows,
+  useListAisleOverrides,
   useListMembers,
   useListRealtime,
   useRenameList,
+  useRememberMove,
   useSetAisle,
-  useSetAisleOverride,
   useSetChecked,
+  useSetListAisleOrder,
   useShoppingItems,
   useShoppingList,
 } from '@/lib/shopping'
@@ -43,6 +44,7 @@ import ShoppingLineRow from '@/components/ShoppingLineRow'
 import MergePrompt from '@/components/MergePrompt'
 import AddRecipeToList from '@/components/AddRecipeToList'
 import ShareListPanel from '@/components/ShareListPanel'
+import SectionOrderEditor from '@/components/SectionOrderEditor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -85,7 +87,10 @@ export default function ShoppingListPage() {
   const foods = useFoods()
   const aisleMap = useAisleMap()
   const overrides = useAisleOverrides()
-  const saveOverride = useSetAisleOverride()
+  const listOverrides = useListAisleOverrides(id)
+  const rememberMoveM = useRememberMove(id)
+  const setOrder = useSetListAisleOrder(id)
+  const foodById = useMemo(() => new Map((foods.data ?? []).map((f) => [f.id, f])), [foods.data])
 
   const addItem = useAddItem(id)
   const setChecked = useSetChecked(id)
@@ -102,6 +107,7 @@ export default function ShoppingListPage() {
   const [newName, setNewName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pickingRecipe, setPickingRecipe] = useState(false)
+  const [ordering, setOrdering] = useState(false)
   const [dismissed, dismiss] = useDismissed(id)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -117,7 +123,8 @@ export default function ShoppingListPage() {
     [openLines, measures.data, dismissed],
   )
   const suggestionByFood = useMemo(() => new Map(suggestions.map((s) => [s.foodKey, s])), [suggestions])
-  const openGroups = useMemo(() => groupByAisle(openLines), [openLines])
+  const aisleOrder = useMemo(() => effectiveOrder(list.data?.aisle_order), [list.data?.aisle_order])
+  const openGroups = useMemo(() => groupByAisle(openLines, aisleOrder), [openLines, aisleOrder])
 
   // Recipes whose items are on this list, so a whole recipe can be taken off again.
   const recipesOnList = useMemo(() => {
@@ -165,8 +172,13 @@ export default function ShoppingListPage() {
       amount: parsed.amount,
       unit: parsed.unit,
       food_id: food?.id ?? null,
-      // a section someone chose for this name before beats the food database's guess
-      aisle: overrideFor(overrides.data, parsed.name) ?? aisleFor(food, aisleMap.data),
+      aisle: chooseAisle({
+        name: parsed.name,
+        food,
+        groupMap: aisleMap.data,
+        shared: overrides.data,
+        list: listOverrides.data,
+      }),
     })
     // The item is already on the list (and, offline, waits to be sent): no need to wait.
     setText('')
@@ -204,8 +216,16 @@ export default function ShoppingListPage() {
       onSetUnit={(unit) => edit(relabelLine(line, unit))}
       onSetAisle={(aisle) => {
         setAisle.mutate({ ids: line.items.map((r) => r.id), aisle })
-        // share the correction so the next person adding this gets the right section
-        for (const name of new Set(line.items.map((r) => r.name))) saveOverride.mutate({ name, aisle })
+        // Remember it for next time: for everyone, or for this list only when "Fri for" is involved.
+        for (const item of line.items.filter((r, i, all) => all.findIndex((x) => x.name === r.name) === i)) {
+          const automatic = automaticAisle({
+            name: item.name,
+            food: item.food_id != null ? foodById.get(item.food_id) : null,
+            groupMap: aisleMap.data,
+            shared: overrides.data,
+          })
+          rememberMoveM.mutate({ name: item.name, from: line.aisle, memory: rememberMove(line.aisle, aisle as Aisle, automatic) })
+        }
       }}
       onSetAmount={(amount, unit) => {
         const adj = line.amount == null ? giveAmount(line, amount, unit) : adjustLine(line, amount)
@@ -305,6 +325,32 @@ export default function ShoppingListPage() {
       {mutationError && <p role="alert" className="text-sm text-destructive">Noe gikk galt. Prøv igjen.</p>}
       {itemsQuery.isLoading && <p className="text-sm text-muted-foreground">Laster varer …</p>}
       {itemsQuery.isError && <p role="alert" className="text-sm text-destructive">Kunne ikke hente varene.</p>}
+
+      {ordering ? (
+        <SectionOrderEditor
+          initial={aisleOrder}
+          inUse={new Set(openGroups.map((g) => g.aisle))}
+          saving={setOrder.isPending}
+          onSave={(order) => setOrder.mutate(order, { onSuccess: () => setOrdering(false) })}
+          onReset={() => setOrder.mutate(null, { onSuccess: () => setOrdering(false) })}
+          onCancel={() => setOrdering(false)}
+        />
+      ) : (
+        openGroups.length > 0 && (
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!online}
+              title={online ? undefined : 'Krever nett'}
+              onClick={() => setOrdering(true)}
+            >
+              <ArrowDownUp aria-hidden /> Endre rekkefølge
+            </Button>
+          </div>
+        )
+      )}
+      {setOrder.isError && <p role="alert" className="text-sm text-destructive">Kunne ikke lagre rekkefølgen.</p>}
 
       {openGroups.length > 0 && (
         <ul className="rounded-lg border border-border bg-card px-1 pb-1">

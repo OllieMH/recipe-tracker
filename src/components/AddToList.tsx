@@ -2,15 +2,15 @@ import { useMemo, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import type { Measures } from '@/lib/conversion'
 import { formatNumber, scaleFactor } from '@/lib/scaling'
-import { overrideFor } from '@/lib/aisle-overrides'
+import { chooseAisle } from '@/lib/aisles'
 import { useFoods } from '@/lib/foods'
 import { recipeToListItems, type ListableRecipe, type UnitMode } from '@/lib/recipe-to-list'
 import { formatLineAmount } from '@/lib/shopping-merge'
 import {
-  aisleFor,
   useAddRecipeToList,
   useAisleMap,
   useAisleOverrides,
+  useListAisleOverrides,
   useCreateList,
   useRecipeRows,
   useShoppingLists,
@@ -70,6 +70,8 @@ export default function AddToList({
     return all.find((l) => l.id === last)?.id ?? all[0]?.id ?? 'new'
   }, [all])
   const listId = fixedList?.id ?? chosen ?? defaultId
+  // the chosen list's own sections ("Fri for")
+  const listOverrides = useListAisleOverrides(listId === 'new' ? undefined : listId)
 
   const foodById = useMemo(() => new Map((foods.data ?? []).map((f) => [f.id, f])), [foods.data])
   const rows = useMemo(
@@ -78,11 +80,18 @@ export default function AddToList({
         factor,
         unitMode,
         measuresByFood: measures,
-        aisleOf: (id, name) =>
-          overrideFor(overrides.data, name) ?? aisleFor(id != null ? foodById.get(id) : null, aisleMap.data),
+        aisleOf: (ing) =>
+          chooseAisle({
+            name: ing.name,
+            food: ing.food_id != null ? foodById.get(ing.food_id) : null,
+            suggested: ing.aisle,
+            groupMap: aisleMap.data,
+            shared: overrides.data,
+            list: listOverrides.data,
+          }),
         categoryOf: (id) => (id != null ? (foodById.get(id)?.category ?? null) : null),
       }),
-    [recipe, factor, unitMode, measures, foodById, aisleMap.data, overrides.data],
+    [recipe, factor, unitMode, measures, foodById, aisleMap.data, overrides.data, listOverrides.data],
   )
 
   const existing = useRecipeRows(listId === 'new' ? undefined : listId, recipe.id)

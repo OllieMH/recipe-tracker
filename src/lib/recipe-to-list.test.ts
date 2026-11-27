@@ -20,7 +20,7 @@ const recipe: ListableRecipe = {
   ],
 }
 
-const aisleOf = (id: number | null) => (id === 10 ? 'Tørrvarer' : id === 20 || id === 30 ? 'Meieri og egg' : 'Annet')
+const aisleOf = ({ food_id: id }: { food_id: number | null }) => (id === 10 ? 'Bakevarer' : id === 20 || id === 30 ? 'Meieri og egg' : 'Annet')
 const categoryOf = (id: number | null) => (id === 30 ? 'Melk' : id === 10 ? 'Mel' : null)
 const measures = new Map([[10, { dl: 55 }], [30, { dl: 103 }]])
 const run = (unitMode: UnitMode, factor = 1) =>
@@ -31,7 +31,7 @@ describe('recipeToListItems', () => {
     const out = run('recipe', 2)
     expect(out.map((o) => o.ingredientId)).toEqual([1, 2, 3, 4])
     expect(out[0].item).toMatchObject({
-      name: 'hvetemel', amount: 8, unit: 'dl', food_id: 10, aisle: 'Tørrvarer', recipe_id: 'r1', recipe_title: 'Boller',
+      name: 'hvetemel', amount: 8, unit: 'dl', food_id: 10, aisle: 'Bakevarer', recipe_id: 'r1', recipe_title: 'Boller',
     })
     expect(out[1].item).toMatchObject({ name: 'salt', amount: null, unit: null })
     expect(out[2].item).toMatchObject({ amount: 2, amount_max: 4, unit: 'stk', aisle: 'Meieri og egg' })

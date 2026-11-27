@@ -322,4 +322,10 @@ describe('formatting', () => {
     const groups = groupByAisle([{ aisle: 'Annet' }, { aisle: 'Meieri og egg' }, { aisle: 'Frukt og grønt' }, { aisle: 'Ukjent' }])
     expect(groups.map((g) => g.aisle)).toEqual(['Frukt og grønt', 'Meieri og egg', 'Ukjent', 'Annet'])
   })
+
+  it('follows a list’s own order', () => {
+    const lines = [{ aisle: 'Frukt og grønt' }, { aisle: 'Kjøtt og fisk' }, { aisle: 'Annet' }]
+    const groups = groupByAisle(lines, ['Kjøtt og fisk', 'Frukt og grønt', 'Annet'])
+    expect(groups.map((g) => g.aisle)).toEqual(['Kjøtt og fisk', 'Frukt og grønt', 'Annet'])
+  })
 })

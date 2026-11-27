@@ -23,6 +23,7 @@ UNITS
 - Ranges like "2-3" use amount = 2 and amount_max = 3.
 - Mark ingredients that should not scale (salt etter smak, til steking, litt, to taste, for frying) with scalable false.
 - food_match: your best guess at the plain Norwegian food name (e.g. "hvetemel", "smør"), or null.
+- aisle: where a Norwegian grocery store keeps the product, one of: Frukt og grønt, Brød, Pålegg og frokost, Kjøtt og fisk, Meieri og egg, Middag og hermetikk (pasta, rice, canned food, stock, taco, coconut milk), Krydder, olje og saus (spices, oil, vinegar, ketchup, soy sauce), Bakevarer (flour, sugar, baking powder, cocoa, baking chocolate, dry yeast, dried fruit, nuts for baking), Fri for (only when the ingredient itself is gluten-, lactose- or milk-free etc.), Frysevarer, Drikke, Husholdning, Snacks og godteri, Annet. Think about the form used: fresh coriander and fresh ginger are Frukt og grønt, dried or ground ones are Krydder, olje og saus; canned tomatoes are Middag og hermetikk. Use null if unsure.
 
 OVEN
 - oven: a short summary of how the oven should be set, one entry per distinct setting in the order used (e.g. bread baked at 250 °C, then at 200 °C, is two entries). Use an empty list if the recipe does not use the oven. Keep the oven information in the steps too.

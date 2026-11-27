@@ -4,7 +4,7 @@ import type { DraftIngredient, DraftRecipe } from './recipe-draft'
 
 const ing = (name: string, amount: string, unit = 'dl', food_id: number | null = null): DraftIngredient => ({
   key: name, original_text: `${amount} ${unit} ${name}`, amount, amount_max: '', unit,
-  original_amount: null, original_unit: null, name, note: '', scalable: true, food_id,
+  original_amount: null, original_unit: null, name, note: '', scalable: true, food_id, aisle: null,
 })
 
 const base = (): DraftRecipe => ({

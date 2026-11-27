@@ -37,6 +37,10 @@ npm run build
   `scripts/make-icons.ps1`.
 - **Oven settings** (`recipes.oven`, a JSON list): filled in by import and Fix with AI,
   editable in the form. The shape is checked by zod (`OvenStepSchema`), not the database.
+- **Shopping list sections:** the list and default order are in
+  `supabase/functions/_shared/aisles.ts` and in the `aisles` table (keep both the same).
+  How a section is chosen, and the word rules, are in `src/lib/aisles.ts`. Moves to and
+  from «Fri for» are saved per list; other moves are shared and listed on `/admin`.
 - **Suggestions:** users send them at `/forslag` and see the status and reply; admins
   answer them on `/admin`.
 - **Invite email:** `supabase/templates/invite.html`. The hosted copy lives in the

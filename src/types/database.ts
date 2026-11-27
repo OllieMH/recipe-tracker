@@ -52,24 +52,35 @@ export type Database = {
           aisle?: string
           category?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "aisle_map_aisle_fkey"
+            columns: ["aisle"]
+            isOneToOne: false
+            referencedRelation: "aisles"
+            referencedColumns: ["name"]
+          },
+        ]
       }
       aisle_overrides: {
         Row: {
           aisle: string
           name_key: string
+          previous_aisle: string | null
           updated_at: string
           updated_by: string | null
         }
         Insert: {
           aisle: string
           name_key: string
+          previous_aisle?: string | null
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
           aisle?: string
           name_key?: string
+          previous_aisle?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -82,6 +93,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      aisles: {
+        Row: {
+          name: string
+          position: number
+        }
+        Insert: {
+          name: string
+          position: number
+        }
+        Update: {
+          name?: string
+          position?: number
+        }
+        Relationships: []
       }
       favorites: {
         Row: {
@@ -244,6 +270,7 @@ export type Database = {
       }
       ingredients: {
         Row: {
+          aisle: string | null
           amount: number | null
           amount_max: number | null
           food_id: number | null
@@ -259,6 +286,7 @@ export type Database = {
           unit: string | null
         }
         Insert: {
+          aisle?: string | null
           amount?: number | null
           amount_max?: number | null
           food_id?: number | null
@@ -274,6 +302,7 @@ export type Database = {
           unit?: string | null
         }
         Update: {
+          aisle?: string | null
           amount?: number | null
           amount_max?: number | null
           food_id?: number | null
@@ -289,6 +318,13 @@ export type Database = {
           unit?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ingredients_aisle_fkey"
+            columns: ["aisle"]
+            isOneToOne: false
+            referencedRelation: "aisles"
+            referencedColumns: ["name"]
+          },
           {
             foreignKeyName: "ingredients_food_id_fkey"
             columns: ["food_id"]
@@ -409,6 +445,52 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopping_list_aisle_overrides: {
+        Row: {
+          aisle: string
+          list_id: string
+          name_key: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          aisle: string
+          list_id: string
+          name_key: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          aisle?: string
+          list_id?: string
+          name_key?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_list_aisle_overrides_aisle_fkey"
+            columns: ["aisle"]
+            isOneToOne: false
+            referencedRelation: "aisles"
+            referencedColumns: ["name"]
+          },
+          {
+            foreignKeyName: "shopping_list_aisle_overrides_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "shopping_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_list_aisle_overrides_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -550,18 +632,21 @@ export type Database = {
       }
       shopping_lists: {
         Row: {
+          aisle_order: string[] | null
           created_at: string
           id: string
           name: string
           owner_id: string
         }
         Insert: {
+          aisle_order?: string[] | null
           created_at?: string
           id?: string
           name: string
           owner_id: string
         }
         Update: {
+          aisle_order?: string[] | null
           created_at?: string
           id?: string
           name?: string
@@ -655,6 +740,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_list_aisle_overrides: {
+        Args: never
+        Returns: {
+          aisle: string
+          display_name: string
+          name_key: string
+          previous_aisle: string
+          updated_at: string
+        }[]
+      }
       admin_list_suggestions: {
         Args: never
         Returns: {
@@ -709,7 +804,11 @@ export type Database = {
       }
       save_recipe: { Args: { payload: Json }; Returns: string }
       set_aisle_override: {
-        Args: { p_aisle: string; p_key: string }
+        Args: { p_aisle: string; p_from?: string; p_key: string }
+        Returns: undefined
+      }
+      set_list_aisle_order: {
+        Args: { p_list_id: string; p_order: string[] }
         Returns: undefined
       }
       share_list: {
