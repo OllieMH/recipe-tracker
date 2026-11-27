@@ -21,6 +21,22 @@ export const IngredientSchema = z.object({
   food_match: z.string().nullable(),
 })
 
+export const OVEN_MODES = [
+  'over_under', 'varmluft', 'overvarme', 'undervarme', 'grill', 'varmluft_grill',
+] as const
+export const OVEN_RACKS = ['nederst', 'midten', 'overst'] as const
+
+/** One oven setting. A recipe lists them in the order they are used. */
+export const OvenStepSchema = z.object({
+  temp_c: z.number().nullable(),
+  mode: z.enum(OVEN_MODES).nullable(),
+  minutes: z.number().nullable(),
+  minutes_max: z.number().nullable(),
+  rack: z.enum(OVEN_RACKS).nullable(),
+  note: z.string().nullable(),
+})
+export type OvenStep = z.infer<typeof OvenStepSchema>
+
 export const RecipeSchema = z.object({
   title: z.string(),
   description: z.string().nullable(),
@@ -36,6 +52,7 @@ export const RecipeSchema = z.object({
     }),
   ),
   steps: z.array(z.object({ group_name: z.string().nullable(), text: z.string() })),
+  oven: z.array(OvenStepSchema),
   tips: z.array(z.string()),
   tags: z.array(z.string()),
   corrections: z.array(

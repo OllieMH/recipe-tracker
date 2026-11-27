@@ -1,7 +1,8 @@
 // Field-by-field diff between the current recipe and an AI-proposed one.
 // Each Change can be accepted or rejected on its own ("Fiks med AI").
 
-import { newKey, type DraftGroup, type DraftIngredient, type DraftRecipe } from './recipe-draft'
+import { newKey, ovenFromDraft, type DraftGroup, type DraftIngredient, type DraftRecipe } from './recipe-draft'
+import { ovenStepText } from './oven'
 
 export interface Change {
   id: string
@@ -132,6 +133,14 @@ export function computeChanges(current: DraftRecipe, proposed: DraftRecipe): Cha
     changes.push({
       id: 'steps', label: 'Fremgangsmåte (alle steg)', before: fmt(current.steps), after: fmt(proposed.steps),
       apply: (d) => ({ ...d, steps: proposed.steps.map((s) => ({ ...s, key: newKey() })) }),
+    })
+  }
+
+  const ovenText = (d: DraftRecipe) => ovenFromDraft(d.oven).map(ovenStepText).join('\n')
+  if (ovenText(current) !== ovenText(proposed)) {
+    changes.push({
+      id: 'oven', label: 'Ovn', before: ovenText(current) || '(ingen)', after: ovenText(proposed) || '(ingen)',
+      apply: (d) => ({ ...d, oven: proposed.oven.map((o) => ({ ...o, key: newKey() })) }),
     })
   }
 

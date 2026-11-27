@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
     steps: [...r.steps]
       .sort((a, b) => a.position - b.position)
       .map((s) => ({ group_name: s.group_name, text: s.text })),
+    oven: (r.oven ?? []) as Recipe['oven'],
     tips: r.tips,
     tags: r.tags,
     corrections: [],

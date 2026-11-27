@@ -21,6 +21,8 @@ import { Button } from '@/components/ui/button'
 import CollapsibleSection from '@/components/CollapsibleSection'
 import FixWithAi from '@/components/FixWithAi'
 import AddToList from '@/components/AddToList'
+import OvenCard from '@/components/OvenCard'
+import { parseOven } from '@/lib/oven'
 import { cn } from '@/lib/utils'
 import { ChevronLeft, Clock, Download, ExternalLink, Languages, Lock, Minus, Plus, ShoppingBasket, Star, Timer } from 'lucide-react'
 
@@ -149,6 +151,7 @@ export default function RecipeDetailPage() {
   const isFav = favorites.data?.has(r.id) ?? false
   const servingsChanged = servingsOverride != null && servingsOverride !== baseServings
   const canGrams = foodIds.length > 0
+  const oven = parseOven(r.oven)
 
   const isOwner = r.owner_id === user?.id
   const canEdit = isOwner || (!!admin.data && r.visibility === 'public')
@@ -168,7 +171,7 @@ export default function RecipeDetailPage() {
 
   function downloadMarkdown() {
     const md = recipeToMarkdown(
-      { ...r!, servings: r!.servings != null ? Number(r!.servings) : null },
+      { ...r!, servings: r!.servings != null ? Number(r!.servings) : null, oven },
       { servings, grams, measures: measures.data },
     )
     downloadText(md, exportFilename(r!.title))
@@ -176,7 +179,7 @@ export default function RecipeDetailPage() {
 
   async function copyText() {
     const text = recipeToPlainText(
-      { ...r!, servings: r!.servings != null ? Number(r!.servings) : null },
+      { ...r!, servings: r!.servings != null ? Number(r!.servings) : null, oven },
       { servings, grams, measures: measures.data },
     )
     try {
@@ -390,6 +393,13 @@ export default function RecipeDetailPage() {
           <p className="text-sm text-muted-foreground">* Omregnet fra amerikanske mål. Trykk på ingrediensen for originalen.</p>
         )}
       </CollapsibleSection>
+      {oven.length > 0 && (
+        <div className="mt-8">
+          <CollapsibleSection id="oven" title="Ovn">
+            <OvenCard steps={oven} />
+          </CollapsibleSection>
+        </div>
+      )}
       </div>
 
       <div className="space-y-8">

@@ -35,6 +35,10 @@ npm run build
   edits, `src/lib/shopping-mutations.ts`); recipes do not. Bump `CACHE_BUSTER` in
   `src/lib/cache-persister.ts` when the shape of cached data changes. Icons:
   `scripts/make-icons.ps1`.
+- **Oven settings** (`recipes.oven`, a JSON list): filled in by import and Fix with AI,
+  editable in the form. The shape is checked by zod (`OvenStepSchema`), not the database.
+- **Suggestions:** users send them at `/forslag` and see the status and reply; admins
+  answer them on `/admin`.
 - **Invite email:** `supabase/templates/invite.html`. The hosted copy lives in the
   Supabase dashboard (Authentication → Emails), so update both.
 

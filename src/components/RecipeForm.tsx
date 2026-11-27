@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import FoodPicker from '@/components/FoodPicker'
+import OvenFields from '@/components/OvenFields'
 
 interface Props {
   draft: DraftRecipe
@@ -258,6 +259,8 @@ export default function RecipeForm({ draft, onChange, foods }: Props) {
           + Ingrediensgruppe
         </Button>
       </section>
+
+      <OvenFields rows={draft.oven} onChange={(rows) => set('oven', rows)} />
 
       <section className="space-y-3">
         <h2 className="text-xl font-bold">Fremgangsmåte</h2>

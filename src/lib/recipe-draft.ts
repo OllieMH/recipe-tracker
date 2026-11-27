@@ -1,8 +1,9 @@
 import { supabase } from './supabase'
 import { autoMatchFood, type Food } from './foods'
 import { removeImageFiles } from './images'
-import type { Recipe } from './recipe-schema'
+import type { OvenStep, Recipe } from './recipe-schema'
 import type { RecipeDetail } from './recipes'
+import { parseOven } from './oven'
 
 /** Editable form state: numbers are strings so users can type "2,5" freely. */
 export interface DraftIngredient {
@@ -31,6 +32,17 @@ export interface DraftStep {
   text: string
 }
 
+/** One oven setting in the form; numbers as typed. */
+export interface DraftOven {
+  key: string
+  temp_c: string
+  mode: OvenStep['mode']
+  minutes: string
+  minutes_max: string
+  rack: OvenStep['rack']
+  note: string
+}
+
 export interface DraftRecipe {
   visibility: 'public' | 'private'
   title: string
@@ -46,6 +58,7 @@ export interface DraftRecipe {
   tips: string
   groups: DraftGroup[]
   steps: DraftStep[]
+  oven: DraftOven[]
   import_raw_text: string | null
   corrections: Recipe['corrections']
   warnings: string[]
@@ -93,10 +106,45 @@ export function emptyDraft(visibility: 'public' | 'private' = 'public'): DraftRe
     tips: '',
     groups: [{ key: newKey(), name: '', ingredients: [emptyIngredient()] }],
     steps: [{ key: newKey(), group_name: '', text: '' }],
+    oven: [],
     import_raw_text: null,
     corrections: [],
     warnings: [],
   }
+}
+
+export function emptyOven(): DraftOven {
+  return { key: newKey(), temp_c: '', mode: null, minutes: '', minutes_max: '', rack: null, note: '' }
+}
+
+export function draftOven(o: OvenStep): DraftOven {
+  return {
+    key: newKey(),
+    temp_c: numStr(o.temp_c),
+    mode: o.mode,
+    minutes: numStr(o.minutes),
+    minutes_max: numStr(o.minutes_max),
+    rack: o.rack,
+    note: o.note ?? '',
+  }
+}
+
+/** Form rows to stored settings; rows with nothing filled in are dropped. */
+export function ovenFromDraft(rows: DraftOven[]): OvenStep[] {
+  const round = (s: string) => {
+    const n = parseNumber(s)
+    return n == null ? null : Math.round(n)
+  }
+  return rows
+    .map((o) => ({
+      temp_c: round(o.temp_c),
+      mode: o.mode,
+      minutes: round(o.minutes),
+      minutes_max: round(o.minutes_max),
+      rack: o.rack,
+      note: o.note.trim() || null,
+    }))
+    .filter((o) => o.temp_c != null || o.mode != null || o.minutes != null || o.rack != null || o.note != null)
 }
 
 export function draftFromLlm(
@@ -134,6 +182,7 @@ export function draftFromLlm(
       })),
     })),
     steps: r.steps.map((s) => ({ key: newKey(), group_name: s.group_name ?? '', text: s.text })),
+    oven: (r.oven ?? []).map(draftOven),
     import_raw_text: opts.rawText,
     corrections: r.corrections,
     warnings: r.servings == null
@@ -175,6 +224,7 @@ export function draftFromRecipe(r: RecipeDetail): DraftRecipe {
       })),
     })),
     steps: r.steps.map((st) => ({ key: newKey(), group_name: st.group_name ?? '', text: st.text })),
+    oven: parseOven(r.oven).map(draftOven),
     import_raw_text: r.import_raw_text,
     corrections: [],
     warnings: [],
@@ -192,6 +242,13 @@ export function validateDraft(d: DraftRecipe): string | null {
     ['porsjoner', d.servings], ['forberedelsestid', d.prep_minutes], ['total tid', d.total_minutes],
   ] as const) {
     if (v.trim() && parseNumber(v) == null) return `Ugyldig tall for ${label}.`
+  }
+  for (const o of d.oven) {
+    for (const v of [o.temp_c, o.minutes, o.minutes_max]) {
+      if (v.trim() && parseNumber(v) == null) return 'Ugyldig tall i ovnsinnstillingene.'
+    }
+    const t = parseNumber(o.temp_c)
+    if (t != null && (t < 30 || t > 350)) return 'Ovnstemperaturen må være mellom 30 og 350 °C.'
   }
   for (const i of ingredients) {
     if ((i.amount.trim() && parseNumber(i.amount) == null) || (i.amount_max.trim() && parseNumber(i.amount_max) == null)) {
@@ -244,6 +301,7 @@ export function draftToPayload(d: DraftRecipe) {
         })),
       })),
     steps: d.steps.map((s) => ({ group_name: s.group_name.trim() || null, text: s.text.trim() })),
+    oven: ovenFromDraft(d.oven),
   }
 }
 

@@ -1,3 +1,4 @@
+import { parseOven } from '@/lib/oven'
 import InstallHint from '@/components/InstallHint'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -56,7 +57,7 @@ export default function RecipeListPage() {
       const { default: JSZip } = await import('jszip')
       const zip = new JSZip()
       full.forEach((r, i) => {
-        zip.file(names[i], recipeToMarkdown({ ...r, servings: r.servings != null ? Number(r.servings) : null }))
+        zip.file(names[i], recipeToMarkdown({ ...r, servings: r.servings != null ? Number(r.servings) : null, oven: parseOven(r.oven) }))
       })
       downloadBlob(await zip.generateAsync({ type: 'blob' }), `oppskrifter-favoritter-${new Date().toISOString().slice(0, 10)}.zip`)
     } catch {

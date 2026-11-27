@@ -334,6 +334,7 @@ export type Database = {
           image_path: string | null
           import_raw_text: string | null
           original_language: string | null
+          oven: Json
           owner_id: string
           parent_id: string | null
           prep_minutes: number | null
@@ -356,6 +357,7 @@ export type Database = {
           image_path?: string | null
           import_raw_text?: string | null
           original_language?: string | null
+          oven?: Json
           owner_id: string
           parent_id?: string | null
           prep_minutes?: number | null
@@ -378,6 +380,7 @@ export type Database = {
           image_path?: string | null
           import_raw_text?: string | null
           original_language?: string | null
+          oven?: Json
           owner_id?: string
           parent_id?: string | null
           prep_minutes?: number | null
@@ -606,11 +609,65 @@ export type Database = {
           },
         ]
       }
+      suggestions: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          kind: string
+          reply: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          kind?: string
+          reply?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          reply?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      admin_list_suggestions: {
+        Args: never
+        Returns: {
+          body: string
+          created_at: string
+          display_name: string
+          email: string
+          id: string
+          kind: string
+          reply: string
+          status: string
+        }[]
+      }
       admin_list_users: {
         Args: never
         Returns: {

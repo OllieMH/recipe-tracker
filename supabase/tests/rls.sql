@@ -22,6 +22,8 @@ update public.profiles set is_admin = true where id = 'cccccccc-0000-0000-0000-0
 insert into public.recipes (id, owner_id, visibility, title) values
   ('11111111-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'public',  'Alice public'),
   ('22222222-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001', 'private', 'Alice private');
+update public.recipes set oven = '[{"temp_c": 200, "mode": "varmluft"}]'
+  where id = '11111111-0000-0000-0000-000000000001';
 
 insert into public.ingredient_groups (id, recipe_id, position) overriding system value values
   (900001, '11111111-0000-0000-0000-000000000001', 0),
@@ -139,6 +141,7 @@ begin
   assert n = 1, 'copy must include the ingredients';
   select count(*) into n from public.steps where recipe_id = copy1;
   assert n = 1, 'copy must include the steps';
+  assert r.oven = '[{"temp_c": 200, "mode": "varmluft"}]'::jsonb, 'copy must include the oven settings';
 
   copy2 := public.copy_recipe('11111111-0000-0000-0000-000000000001');
   assert copy2 = copy1, 'copying twice must return the same copy';
@@ -426,6 +429,72 @@ begin
   assert ok, 'an unknown section must be rejected';
 end $$;
 
+-- suggestions (needs the 20261127000002_suggestions migration)
+-- bob sends one; alice cannot see it; bob cannot set its status; carol (admin) can.
+select set_config('request.jwt.claims',
+  '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}', true);
+do $$
+declare ok boolean; n int;
+begin
+  insert into public.suggestions (kind, body) values ('idea', 'Bobs forslag');
+  assert (select user_id from public.suggestions where body = 'Bobs forslag') = auth.uid(),
+    'a suggestion must belong to the sender';
+
+  ok := false;
+  begin insert into public.suggestions (kind, body, user_id)
+    values ('idea', 'Forfalsket', 'aaaaaaaa-0000-0000-0000-000000000001');
+  exception when insufficient_privilege then ok := true; end;
+  assert ok, 'a suggestion must not be sent in someone else''s name';
+
+  ok := false;
+  begin update public.suggestions set status = 'done' where body = 'Bobs forslag';
+  get diagnostics n = row_count;
+  ok := n = 0;
+  exception when insufficient_privilege then ok := true; end;
+  assert ok, 'a regular user must not set status';
+
+  ok := false;
+  begin perform public.admin_list_suggestions();
+  exception when insufficient_privilege then ok := true; end;
+  assert ok, 'admin_list_suggestions is for admins only';
+end $$;
+
+select set_config('request.jwt.claims',
+  '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated"}', true);
+do $$
+declare n int;
+begin
+  select count(*) into n from public.suggestions where body = 'Bobs forslag';
+  assert n = 0, 'alice must not see bob''s suggestion';
+  delete from public.suggestions where body = 'Bobs forslag';
+  get diagnostics n = row_count;
+  assert n = 0, 'alice must not delete bob''s suggestion';
+end $$;
+
+select set_config('request.jwt.claims',
+  '{"sub":"cccccccc-0000-0000-0000-000000000003","role":"authenticated"}', true);
+do $$
+declare n int;
+begin
+  update public.suggestions set status = 'planned', reply = 'God idé' where body = 'Bobs forslag';
+  get diagnostics n = row_count;
+  assert n = 1, 'an admin must be able to set status and reply';
+  select count(*) into n from public.admin_list_suggestions() where body = 'Bobs forslag';
+  assert n = 1, 'the admin list must include bob''s suggestion';
+end $$;
+
+select set_config('request.jwt.claims',
+  '{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}', true);
+do $$
+declare n int;
+begin
+  assert (select status from public.suggestions where body = 'Bobs forslag') = 'planned',
+    'bob must see the status the admin set';
+  delete from public.suggestions where body = 'Bobs forslag';
+  get diagnostics n = row_count;
+  assert n = 0, 'a suggestion the admin has handled must not be deleted by its sender';
+end $$;
+
 -- ============================================================================
 -- anon (not signed in, only holds the public anon key)
 -- Recipes are meant for signed-in users only ("Logg inn for å se oppskriftene"),
@@ -486,6 +555,10 @@ begin
   begin
     select count(*) into n from public.aisle_overrides;
     raise exception 'anon read aisle_overrides';
+  exception when insufficient_privilege then null; end;
+  begin
+    select count(*) into n from public.suggestions;
+    raise exception 'anon read suggestions';
   exception when insufficient_privilege then null; end;
 end $$;
 

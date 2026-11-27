@@ -24,6 +24,14 @@ UNITS
 - Mark ingredients that should not scale (salt etter smak, til steking, litt, to taste, for frying) with scalable false.
 - food_match: your best guess at the plain Norwegian food name (e.g. "hvetemel", "smør"), or null.
 
+OVEN
+- oven: a short summary of how the oven should be set, one entry per distinct setting in the order used (e.g. bread baked at 250 °C, then at 200 °C, is two entries). Use an empty list if the recipe does not use the oven. Keep the oven information in the steps too.
+- temp_c: degrees Celsius. Convert °F and gas marks, rounding to the nearest 5.
+- mode: over_under (conventional, top and bottom heat, "over- og undervarme"), varmluft (fan, convection, "varmluft", "fan"), overvarme (top heat only), undervarme (bottom heat only), grill (broil, "grill"), varmluft_grill (fan grill). Use null if the recipe does not say.
+- minutes / minutes_max: time at that setting; a range like 25-30 min is minutes 25 and minutes_max 30. Null if not given.
+- rack: nederst (low), midten (middle), overst (high), or null if not given.
+- note: a short Norwegian note when it matters (e.g. "forvarm", "med lokk", "til gyllen"), else null.
+
 TRANSLATION
 - If the user message says TRANSLATE: true and the source is not Norwegian, write title, description, ingredient names, notes, steps, tips and group names in natural Norwegian bokmål. Otherwise keep the source language.
 

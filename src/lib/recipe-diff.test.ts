@@ -16,6 +16,7 @@ const base = (): DraftRecipe => ({
     { key: 's1', group_name: '', text: 'Bland mel og melk.' },
     { key: 's2', group_name: '', text: 'Stek.' },
   ],
+  oven: [],
   import_raw_text: null, corrections: [], warnings: [],
 })
 
@@ -69,5 +70,14 @@ describe('computeChanges', () => {
     const changes = computeChanges(base(), p)
     expect(changes.map((c) => c.id)).toEqual(['steps'])
     expect(applyChanges(base(), changes).steps).toHaveLength(3)
+  })
+
+  it('offers filled-in oven settings as one change', () => {
+    const p = base()
+    p.oven = [{ key: 'o', temp_c: '200', mode: 'varmluft', minutes: '25', minutes_max: '30', rack: 'midten', note: '' }]
+    const changes = computeChanges(base(), p)
+    expect(changes.map((c) => c.id)).toEqual(['oven'])
+    expect(changes[0].after).toBe('200 °C, varmluft, 25–30 min, midt i ovnen')
+    expect(applyChanges(base(), changes).oven).toHaveLength(1)
   })
 })

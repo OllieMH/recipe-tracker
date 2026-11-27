@@ -41,13 +41,16 @@ export default function AppLayout() {
       </header>
       <OfflineBanner />
       <Outlet />
-      {!isStandalone() && (
-        <footer className="mx-auto max-w-5xl px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-8 text-center text-sm print:hidden">
+      <footer className="mx-auto flex max-w-5xl flex-wrap justify-center gap-x-6 gap-y-2 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-8 text-sm print:hidden">
+        <Link to="/forslag" className="text-muted-foreground underline hover:text-foreground">
+          Forslag til appen
+        </Link>
+        {!isStandalone() && (
           <Link to="/installer" className="text-muted-foreground underline hover:text-foreground">
             Legg appen på Hjem-skjermen
           </Link>
-        </footer>
-      )}
+        )}
+      </footer>
     </div>
   )
 }

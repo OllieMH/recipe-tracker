@@ -3,6 +3,7 @@
 import { displayIngredient, ingredientText } from './ingredient-display'
 import { formatNumber, scaleFactor } from './scaling'
 import type { ExportableRecipe, ExportOptions } from './markdown'
+import { ovenStepText } from './oven'
 
 function formatMinutes(min: number): string {
   const h = Math.floor(min / 60)
@@ -31,6 +32,8 @@ export function recipeToPlainText(r: ExportableRecipe, opts: ExportOptions = {})
       out.push(`- ${ingredientText(d, ing.name, ing.note)}`)
     }
   }
+
+  if (r.oven?.length) out.push('', 'OVN', ...r.oven.map((o) => `- ${ovenStepText(o)}`))
 
   out.push('', 'FREMGANGSMÅTE')
   let n = 0

@@ -3,6 +3,7 @@
 import type { Measures } from './conversion'
 import { displayIngredient, ingredientText, type DisplayableIngredient } from './ingredient-display'
 import { formatNumber, scaleFactor } from './scaling'
+import { ovenStepText, type OvenStep } from './oven'
 
 export interface ExportableRecipe {
   title: string
@@ -18,6 +19,7 @@ export interface ExportableRecipe {
     ingredients: (DisplayableIngredient & { name: string; note: string | null; food_id: number | null })[]
   }[]
   steps: { group_name: string | null; text: string }[]
+  oven?: OvenStep[]
 }
 
 export interface ExportOptions {
@@ -77,6 +79,8 @@ export function recipeToMarkdown(r: ExportableRecipe, opts: ExportOptions = {}):
       md.push(`- [ ] ${ingredientText(d, ing.name, ing.note)}`)
     }
   }
+
+  if (r.oven?.length) md.push('', '## Ovn', '', ...r.oven.map((o) => `- ${ovenStepText(o)}`))
 
   md.push('', '## Fremgangsmåte', '')
   let n = 0
