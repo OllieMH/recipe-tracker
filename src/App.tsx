@@ -11,6 +11,7 @@ import ConverterPage from '@/routes/ConverterPage'
 import ShoppingListsPage from '@/routes/ShoppingListsPage'
 import ShoppingListPage from '@/routes/ShoppingListPage'
 import AdminPage from '@/routes/AdminPage'
+import InstallPage from '@/routes/InstallPage'
 import AuthGuard from '@/components/AuthGuard'
 import AdminGuard from '@/components/AdminGuard'
 import AppLayout from '@/components/AppLayout'
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/omregning" element={<ConverterPage />} />
           <Route path="/handleliste" element={<ShoppingListsPage />} />
           <Route path="/handleliste/:id" element={<ShoppingListPage />} />
+          <Route path="/installer" element={<InstallPage />} />
           <Route element={<AdminGuard />}>
             <Route path="/admin" element={<AdminPage />} />
           </Route>

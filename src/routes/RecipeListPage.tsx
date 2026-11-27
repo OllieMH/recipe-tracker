@@ -1,3 +1,4 @@
+import InstallHint from '@/components/InstallHint'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
@@ -77,6 +78,7 @@ export default function RecipeListPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-4 p-4">
+      <InstallHint />
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />

@@ -2,6 +2,7 @@ import { NavLink, Link, Outlet } from 'react-router-dom'
 import { signOut, useAuth, useIsAdmin } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import OfflineBanner from '@/components/OfflineBanner'
+import { isStandalone } from '@/lib/install'
 
 const navLink = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -40,6 +41,13 @@ export default function AppLayout() {
       </header>
       <OfflineBanner />
       <Outlet />
+      {!isStandalone() && (
+        <footer className="mx-auto max-w-5xl px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-8 text-center text-sm print:hidden">
+          <Link to="/installer" className="text-muted-foreground underline hover:text-foreground">
+            Legg appen på Hjem-skjermen
+          </Link>
+        </footer>
+      )}
     </div>
   )
 }

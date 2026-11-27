@@ -9,9 +9,11 @@ import OfflineQueryProvider from '@/components/OfflineQueryProvider'
 import UpdatePrompt from '@/components/UpdatePrompt'
 import { CACHE_MAX_AGE } from '@/lib/cache-persister'
 import { initOnlineState } from '@/lib/offline'
+import { initInstallPrompt } from '@/lib/install'
 import { registerShoppingMutationDefaults } from '@/lib/shopping-mutations'
 
 initOnlineState()
+initInstallPrompt()
 
 const queryClient = new QueryClient({
   defaultOptions: {
